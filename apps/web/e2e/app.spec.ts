@@ -27,6 +27,25 @@ test.describe('metrics', () => {
     expect(await charts.count()).toBeGreaterThanOrEqual(2)
   })
 
+  test('streams updates and states how far behind CloudWatch is', async ({ page }) => {
+    const requests: string[] = []
+    page.on('request', (request) => {
+      if (request.url().includes('/api/metrics')) requests.push(request.url())
+    })
+
+    await scanned(page)
+    await selectViaPalette(page, 'prod-pg-primary')
+    await page.getByRole('button', { name: 'Metrics', exact: true }).first().click()
+    await expect(page.locator('.ca-chart canvas').first()).toBeVisible()
+
+    // One streaming connection, not a per-tab polling timer.
+    expect(requests.some((url) => url.includes('/api/metrics/stream'))).toBe(true)
+
+    // "Live" without a number invites assuming now; CloudWatch publishes on a
+    // period and adds ingestion delay on top.
+    await expect(page.getByText(/behind/).first()).toBeVisible()
+  })
+
   test('explains an empty chart rather than drawing a flat line', async ({ page }) => {
     await scanned(page)
     // legacy-worker is stopped, so CloudWatch genuinely has nothing.

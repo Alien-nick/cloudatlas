@@ -11,6 +11,7 @@ import type {
   LogQueryRequest,
   DatabaseLoad,
   LogQueryResponse,
+  MetricSeries,
   WafSampledRequestsRequest,
   WafSampledResponse,
   MetricsRequest,
@@ -228,6 +229,63 @@ export function streamAgent(
   })()
 
   return () => controller.abort()
+}
+
+export interface MetricStreamUpdate {
+  type: 'metrics'
+  nodeId: string
+  series: MetricSeries[]
+  /** Age of the newest datapoint, in ms. Null when there is none. */
+  lagMs: number | null
+  missingPermissions: string[]
+}
+
+export type MetricStreamEvent = MetricStreamUpdate | { type: 'error'; message: string }
+
+export interface MetricStreamHandlers {
+  onUpdate: (update: MetricStreamUpdate) => void
+  onError: (message: string) => void
+}
+
+/**
+ * Subscribe to continuous metric updates. Returns a disposer.
+ *
+ * One connection covers every resource passed in, and the server only pushes
+ * when a datapoint the client has not seen actually lands — so this is quieter
+ * than a timer, not busier.
+ */
+export function streamMetrics(
+  params: { nodeIds: string[]; metricNames?: string[]; windowMs: number },
+  handlers: MetricStreamHandlers,
+): () => void {
+  const query = new URLSearchParams({
+    nodeIds: params.nodeIds.join(','),
+    windowMs: String(params.windowMs),
+  })
+  if (params.metricNames?.length) query.set('metricNames', params.metricNames.join(','))
+
+  const source = new EventSource(`/api/metrics/stream?${query.toString()}`)
+  let closed = false
+
+  source.onmessage = (message) => {
+    try {
+      const event = JSON.parse(message.data) as MetricStreamEvent
+      if (event.type === 'metrics') handlers.onUpdate(event)
+      else handlers.onError(event.message)
+    } catch {
+      // A malformed frame costs one update, not the stream.
+    }
+  }
+  source.onerror = () => {
+    if (!closed && source.readyState === EventSource.CLOSED) {
+      handlers.onError('The metric stream disconnected.')
+    }
+  }
+
+  return () => {
+    closed = true
+    source.close()
+  }
 }
 
 export interface TailHandlers {

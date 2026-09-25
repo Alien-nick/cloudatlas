@@ -8,7 +8,7 @@ import {
   type MetricDef,
   type MetricSeries,
 } from '@cloudatlas/shared'
-import { api, ApiError } from '@/lib/api'
+import { api, ApiError, streamMetrics } from '@/lib/api'
 import { useHealthStore } from '@/stores/health'
 import { categoryColor } from '@/lib/utils'
 import { syncKeyFor } from '@/lib/chart'
@@ -30,8 +30,26 @@ const live = ref(true)
 const series = ref<MetricSeries[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
+/** Age of the newest datapoint, as reported by the server. */
+const lagMs = ref<number | null>(null)
 
-let timer: number | null = null
+/**
+ * How stale the newest datapoint is.
+ *
+ * Shown because "live" without a number invites the reader to assume now.
+ * CloudWatch publishes on a period and adds an ingestion delay on top, so a
+ * chart is routinely a minute or two behind even when everything is working —
+ * and knowing which is the difference between "the spike stopped" and "the
+ * spike has not been reported yet".
+ */
+const freshness = computed(() => {
+  if (lagMs.value === null) return null
+  const seconds = Math.round(lagMs.value / 1000)
+  if (seconds < 90) return `${seconds}s behind`
+  return `${Math.round(seconds / 60)}m behind`
+})
+
+let stopStream: (() => void) | null = null
 
 const catalogued = computed(() => primaryMetricsFor(props.node.type))
 
@@ -89,24 +107,54 @@ async function load(): Promise<void> {
   }
 }
 
-function restartTimer(): void {
-  if (timer !== null) window.clearInterval(timer)
-  timer = live.value ? window.setInterval(() => void load(), 15_000) : null
+/**
+ * Subscribe to server-pushed updates instead of polling on a timer.
+ *
+ * The old 15-second interval re-fetched a datapoint CloudWatch had not
+ * replaced yet four times out of five — cost without freshness. The server
+ * polls at the metric's own period and pushes only what is new.
+ */
+function restartStream(): void {
+  stopStream?.()
+  stopStream = null
+  if (!live.value) return
+
+  stopStream = streamMetrics(
+    { nodeIds: [props.node.id], windowMs: range.value.ms },
+    {
+      onUpdate: (update) => {
+        if (update.nodeId !== props.node.id) return
+        series.value = update.series
+        lagMs.value = update.lagMs
+        loading.value = false
+      },
+      onError: (message) => {
+        error.value = message
+      },
+    },
+  )
 }
 
 watch(
-  () => [props.node.id, range.value.id] as const,
+  () => [props.node.id, range.value.id, live.value] as const,
   () => {
     series.value = []
-    void load()
+    lagMs.value = null
+    if (live.value) {
+      // The stream pushes its first update immediately, so this covers the
+      // initial load as well as everything after it.
+      restartStream()
+    } else {
+      // Paused still shows the data as it stands; pausing should stop updates,
+      // not blank the charts.
+      stopStream?.()
+      stopStream = null
+      void load()
+    }
   },
   { immediate: true },
 )
-
-watch(live, restartTimer, { immediate: true })
-onBeforeUnmount(() => {
-  if (timer !== null) window.clearInterval(timer)
-})
+onBeforeUnmount(() => stopStream?.())
 
 function latest(item: MetricSeries): number | null {
   for (let i = item.values.length - 1; i >= 0; i--) {
@@ -157,8 +205,16 @@ function colorFor(item: MetricSeries): string {
   <div>
     <div class="mb-3 flex items-center gap-[7px]">
       <span class="h-[6px] w-[6px] rounded-full" :class="live ? 'bg-ok' : 'bg-faint'" />
-      <span class="whitespace-nowrap text-[11.5px] text-muted" title="CloudWatch resolution">
+      <span
+        class="whitespace-nowrap text-[11.5px] text-muted"
+        :title="
+          freshness
+            ? 'Age of the newest datapoint CloudWatch has published'
+            : 'CloudWatch resolution'
+        "
+      >
         CloudWatch · {{ series[0]?.period ? `${series[0].period}s` : '—' }}
+        <template v-if="freshness"> · {{ freshness }}</template>
       </span>
       <div class="ml-auto flex items-center gap-1">
         <button

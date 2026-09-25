@@ -13,6 +13,13 @@ import type { ServerConfig } from '../config.js'
 import { UNIMPLEMENTED, VERSION } from '../config.js'
 import { openSse } from './sse.js'
 import { runAgent } from '../agent/run.js'
+import { streamMetrics } from '../metrics/stream.js'
+
+const metricStreamQuery = z.object({
+  nodeIds: z.string().min(1),
+  metricNames: z.string().optional(),
+  windowMs: z.coerce.number().min(60_000).max(7 * 24 * 60 * 60_000).default(3_600_000),
+})
 
 const agentChatSchema = z.object({
   messages: z
@@ -130,6 +137,44 @@ export async function registerRoutes(app: FastifyInstance, ctx: RouteContext): P
   app.post('/api/metrics', async (request) => {
     const body = metricsRequestSchema.parse(request.body)
     return provider.getMetrics(body)
+  })
+
+  /**
+   * Continuous metric updates for a set of resources.
+   *
+   * One connection for however many resources are on screen, rather than a
+   * timer per open panel: the cadence is derived from the metric period, so
+   * the server does not spend GetMetricData calls re-fetching a datapoint that
+   * CloudWatch has not replaced yet.
+   */
+  app.get('/api/metrics/stream', async (request, reply) => {
+    const query = metricStreamQuery.parse(request.query)
+    const channel = openSse(request, reply)
+
+    const nodeIds = query.nodeIds.split(',').map((id) => id.trim()).filter(Boolean)
+    const metricNames = (query.metricNames ?? '')
+      .split(',')
+      .map((name) => name.trim())
+      .filter(Boolean)
+
+    try {
+      const stream = streamMetrics({
+        provider,
+        nodeIds,
+        metricNames,
+        windowMs: query.windowMs,
+        signal: channel.signal,
+      })
+      for await (const event of stream) {
+        if (channel.closed) break
+        channel.send(event)
+      }
+    } catch (error) {
+      channel.send({ type: 'error', message: (error as Error).message })
+    } finally {
+      channel.close()
+    }
+    return reply
   })
 
   // ---- health -----------------------------------------------------------
