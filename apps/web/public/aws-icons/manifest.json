@@ -1,0 +1,106 @@
+{
+  "release": "07312026",
+  "source": "https://d1.awsstatic.com/onedam/marketing-channels/website/public/shared/architecture-icon-release/Icon-package_07312026.5846e92413caa21490223536cc97f1269e44fa92.zip",
+  "icons": {
+    "ec2": {
+      "file": "ec2.svg",
+      "style": "service"
+    },
+    "lambda": {
+      "file": "lambda.svg",
+      "style": "service"
+    },
+    "ecs-task": {
+      "file": "ecs-task.svg",
+      "style": "service"
+    },
+    "ecs-service": {
+      "file": "ecs-service.svg",
+      "style": "service"
+    },
+    "alb": {
+      "file": "alb.svg",
+      "style": "resource"
+    },
+    "nlb": {
+      "file": "nlb.svg",
+      "style": "resource"
+    },
+    "target-group": {
+      "file": "target-group.svg",
+      "style": "service"
+    },
+    "nat-gateway": {
+      "file": "nat-gateway.svg",
+      "style": "resource"
+    },
+    "internet-gateway": {
+      "file": "internet-gateway.svg",
+      "style": "resource"
+    },
+    "eni": {
+      "file": "eni.svg",
+      "style": "resource"
+    },
+    "vpc-endpoint": {
+      "file": "vpc-endpoint.svg",
+      "style": "resource"
+    },
+    "cloudfront": {
+      "file": "cloudfront.svg",
+      "style": "service"
+    },
+    "route53-zone": {
+      "file": "route53-zone.svg",
+      "style": "service"
+    },
+    "vpc": {
+      "file": "vpc.svg",
+      "style": "service"
+    },
+    "rds": {
+      "file": "rds.svg",
+      "style": "service"
+    },
+    "rds-cluster": {
+      "file": "rds-cluster.svg",
+      "style": "service"
+    },
+    "elasticache": {
+      "file": "elasticache.svg",
+      "style": "service"
+    },
+    "s3": {
+      "file": "s3.svg",
+      "style": "service"
+    },
+    "ebs-volume": {
+      "file": "ebs-volume.svg",
+      "style": "service"
+    },
+    "sqs": {
+      "file": "sqs.svg",
+      "style": "service"
+    },
+    "sns": {
+      "file": "sns.svg",
+      "style": "service"
+    },
+    "eventbridge-rule": {
+      "file": "eventbridge-rule.svg",
+      "style": "service"
+    },
+    "waf-web-acl": {
+      "file": "waf-web-acl.svg",
+      "style": "service"
+    },
+    "network-firewall": {
+      "file": "network-firewall.svg",
+      "style": "service"
+    },
+    "iam-role": {
+      "file": "iam-role.svg",
+      "style": "service"
+    }
+  }
+}

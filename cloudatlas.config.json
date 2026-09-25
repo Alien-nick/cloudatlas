@@ -1,0 +1,26 @@
+{
+  "provider": "demo",
+  "defaultRegions": [
+    "us-east-1",
+    "us-west-2"
+  ],
+  "healthPollSeconds": 60,
+  "autoRefreshSeconds": 0,
+  "enableCostExplorer": false,
+  "redactAccountIds": false,
+  "detection": {
+    "zScoreThreshold": 3.5,
+    "baselineMinutes": 360,
+    "evaluationMinutes": 15,
+    "floors": {
+      "AWS/RDS/CPUUtilization": 70,
+      "AWS/RDS/DatabaseConnections": 0,
+      "AWS/EC2/CPUUtilization": 80,
+      "AWS/EC2/StatusCheckFailed_Instance": 1,
+      "AWS/ApplicationELB/HTTPCode_Target_5XX_Count": 5,
+      "AWS/ElastiCache/EngineCPUUtilization": 75
+    },
+    "wafSurgeMultiple": 3,
+    "wafDominanceRatio": 0.5
+  }
+}

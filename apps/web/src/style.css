@@ -1,0 +1,254 @@
+@import 'tailwindcss';
+
+/* ---------------------------------------------------------------------------
+   Palette. Values come straight from design/CloudAtlas.dc.html so the app and
+   the design reference stay in lockstep. `--ca-*` holds the raw values; the
+   @theme block below exposes them to Tailwind as utilities.
+   --------------------------------------------------------------------------- */
+
+:root,
+[data-theme='dark'] {
+  --ca-bg: #0b0d0f;
+  --ca-panel: #101316;
+  --ca-panel2: #15191d;
+  --ca-raise: #1a1f24;
+  --ca-border: #1e242a;
+  --ca-border2: #2b333b;
+  --ca-text: #e7eaee;
+  --ca-muted: #8b949e;
+  --ca-faint: #5f6a74;
+  --ca-canvas: #0d1013;
+  --ca-grid: #171c21;
+  --ca-chip: #181d22;
+  --ca-ok: #3fb950;
+  --ca-warn: #d29922;
+  --ca-bad: #f2555a;
+  --ca-shadow: rgba(0, 0, 0, 0.35);
+  --ca-edge: #7f8c9b;
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --ca-bg: #f7f7f6;
+  --ca-panel: #ffffff;
+  --ca-panel2: #fbfbfa;
+  --ca-raise: #f1f1ef;
+  --ca-border: #e5e5e1;
+  --ca-border2: #d6d6d1;
+  --ca-text: #14181c;
+  --ca-muted: #69727c;
+  --ca-faint: #8b939b;
+  --ca-canvas: #fdfdfc;
+  --ca-grid: #eeeeea;
+  --ca-chip: #f2f2ef;
+  --ca-ok: #1a7f37;
+  --ca-warn: #9a6700;
+  --ca-bad: #cf222e;
+  --ca-shadow: rgba(15, 20, 25, 0.12);
+  --ca-edge: #9aa4b0;
+  color-scheme: light;
+}
+
+/* AWS service category colours (CAT in the design). Theme-independent.
+   These must match CATEGORY_COLORS in packages/shared/src/graph.ts, which is
+   what the canvas and charts read; a swatch here that disagrees with the tile
+   it labels is worse than no swatch. */
+:root {
+  --ca-compute: #ed7100;
+  --ca-network: #8c4fff;
+  --ca-database: #c925d1;
+  --ca-storage: #7aa116;
+  --ca-integration: #e7157b;
+  --ca-security: #dd344c;
+  --ca-inactive: #6b7480;
+  --ca-aws-navy: #232f3e;
+}
+
+@theme inline {
+  --color-bg: var(--ca-bg);
+  --color-panel: var(--ca-panel);
+  --color-panel2: var(--ca-panel2);
+  --color-raise: var(--ca-raise);
+  --color-border: var(--ca-border);
+  --color-border2: var(--ca-border2);
+  --color-text: var(--ca-text);
+  --color-muted: var(--ca-muted);
+  --color-faint: var(--ca-faint);
+  --color-canvas: var(--ca-canvas);
+  --color-grid: var(--ca-grid);
+  --color-chip: var(--ca-chip);
+  --color-ok: var(--ca-ok);
+  --color-warn: var(--ca-warn);
+  --color-bad: var(--ca-bad);
+
+  --color-compute: var(--ca-compute);
+  --color-network: var(--ca-network);
+  --color-database: var(--ca-database);
+  --color-storage: var(--ca-storage);
+  --color-integration: var(--ca-integration);
+  --color-security: var(--ca-security);
+  --color-inactive: var(--ca-inactive);
+
+  --font-sans: 'Inter Variable', Inter, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    /* Tailwind v4 defaults border-color to currentColor; the design expects
+       the subtle panel border everywhere instead. */
+    border-color: var(--ca-border);
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--ca-bg);
+  }
+
+  body {
+    color: var(--ca-text);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    letter-spacing: -0.006em;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app {
+    height: 100%;
+  }
+
+  a {
+    color: #7aa2ff;
+    text-decoration: none;
+  }
+  a:hover {
+    color: #9cbaff;
+  }
+
+  button {
+    font-family: inherit;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--ca-border2);
+    border-radius: 6px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer utilities {
+  /* The canvas dot grid from the design. */
+  .ca-dotgrid {
+    background-image: radial-gradient(var(--ca-grid) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  .ca-panel-shadow {
+    box-shadow: 0 18px 48px var(--ca-shadow);
+  }
+
+  /* Uppercase section label used across the sidebar and detail panel. */
+  .ca-eyebrow {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ca-faint);
+  }
+
+  .ca-scroll-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes ca-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ca-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Critical health badge: a slow halo rather than a hard flash. */
+@keyframes ca-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(242, 85, 90, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(242, 85, 90, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Vue Flow overrides. The library ships a light default theme; everything
+   visible is restyled to the design's tokens.
+   --------------------------------------------------------------------------- */
+
+.vue-flow__node {
+  cursor: pointer;
+}
+
+.vue-flow__node.ca-container-node {
+  cursor: default;
+  pointer-events: none;
+}
+
+.vue-flow__node.ca-container-node > * {
+  pointer-events: auto;
+}
+
+.vue-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+}
+
+.vue-flow__edge-path {
+  transition: opacity 0.16s ease;
+}
+
+.vue-flow__minimap {
+  background: var(--ca-panel);
+}
+
+.vue-flow__attribution {
+  display: none;
+}

@@ -1,0 +1,43 @@
+{
+  "name": "cloudatlas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local, read-only AWS architecture explorer with metrics, logs, health detection and a Claude agent.",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c cyan,magenta -k \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:demo": "CLOUDATLAS_PROVIDER=demo npm run dev",
+    "dev:live": "CLOUDATLAS_PROVIDER=live npm run dev",
+    "dev:server": "npm run dev --workspace @cloudatlas/server",
+    "dev:web": "npm run dev --workspace @cloudatlas/web",
+    "build": "npm run build --workspace @cloudatlas/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run check:iam && vitest run",
+    "lint": "npm run typecheck",
+    "icons": "node scripts/fetch-aws-icons.mjs",
+    "capture": "tsx apps/server/src/capture/cli.ts",
+    "iam-policy": "tsx scripts/generate-iam-policy.ts",
+    "check:iam": "tsx scripts/generate-iam-policy.ts --check",
+    "capture:audit": "tsx apps/server/src/capture/audit.ts",
+    "capture:diff": "tsx apps/server/src/capture/diff-cli.ts",
+    "e2e": "playwright test",
+    "e2e:install": "playwright install chromium"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "vue-demi@0.14.10": true,
+    "fsevents@2.3.3": true
+  }
+}

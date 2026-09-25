@@ -1,0 +1,29 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# Local state
+data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Test output
+coverage/
+playwright-report/
+test-results/
+
+# Source design archive
+CloudAtlas AWS Diagram/
+CloudAtlas AWS Diagram.zip
+
+# Capture deny list — contains your real org names
+capture.deny.json
+.playwright/

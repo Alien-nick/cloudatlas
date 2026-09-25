@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin:0; padding:0; background:#0b0d0f; }
+  *, *::before, *::after { box-sizing:border-box; }
+  a { color:#7aa2ff; text-decoration:none; }
+  a:hover { color:#9cbaff; }
+  [data-theme="dark"] {
+    --bg:#0b0d0f; --panel:#101316; --panel2:#15191d; --raise:#1a1f24;
+    --border:#1e242a; --border2:#2b333b; --text:#e7eaee; --muted:#8b949e; --faint:#5f6a74;
+    --canvas:#0d1013; --grid:#171c21; --chip:#181d22; --ok:#3fb950; --warn:#d29922; --bad:#f2555a;
+  }
+  [data-theme="light"] {
+    --bg:#f7f7f6; --panel:#ffffff; --panel2:#fbfbfa; --raise:#f1f1ef;
+    --border:#e5e5e1; --border2:#d6d6d1; --text:#14181c; --muted:#69727c; --faint:#8b939b;
+    --canvas:#fdfdfc; --grid:#eeeeea; --chip:#f2f2ef; --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e;
+  }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:6px; border:3px solid transparent; background-clip:content-box; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  @keyframes ca-spin { to { transform:rotate(360deg); } }
+  @keyframes ca-dash { to { stroke-dashoffset:-16; } }
+  @keyframes ca-blink { 0%,50% { opacity:1; } 51%,100% { opacity:0; } }
+</style>
+</helmet>
+
+<div data-theme="{{ theme }}" style="width:1440px;height:920px;display:flex;flex-direction:column;background:var(--bg);color:var(--text);font-family:Inter, system-ui, sans-serif;font-size:13px;letter-spacing:-0.006em;overflow:hidden">
+
+  <div style="height:52px;flex:0 0 52px;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid var(--border);background:var(--panel)">
+    <div style="display:flex;align-items:center;gap:8px;padding-right:4px">
+      <div style="width:22px;height:22px;border-radius:6px;background:linear-gradient(140deg,#ED7100,#E7157B);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">C</div>
+      <div style="font-size:13.5px;font-weight:600">CloudAtlas</div>
+    </div>
+    <button onClick="{{ toggleAccount }}" style="display:flex;align-items:center;gap:8px;height:30px;padding:0 10px;border:1px solid var(--border2);border-radius:7px;background:var(--panel2);color:var(--text);font-family:inherit;font-size:12.5px;cursor:pointer" style-hover="background:var(--raise)">
+      <span style="width:6px;height:6px;border-radius:50%;background:var(--ok)"></span>
+      <span style="font-weight:550">{{ accountName }}</span>
+      <span style="color:var(--faint)">·</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted)">{{ accountId }}</span>
+      <span style="color:var(--faint);font-size:10px">▾</span>
+    </button>
+
+    <div style="position:relative">
+      <button onClick="{{ toggleRegions }}" style="display:flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid var(--border2);border-radius:7px;background:var(--panel2);color:var(--text);font-family:inherit;font-size:12.5px;cursor:pointer" style-hover="background:var(--raise)">
+        <span style="color:var(--muted)">Regions</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px">{{ regionSummary }}</span>
+        <span style="color:var(--faint);font-size:10px">▾</span>
+      </button>
+      <sc-if value="{{ regionsOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;top:36px;left:0;z-index:40;width:220px;padding:6px;border:1px solid var(--border2);border-radius:9px;background:var(--panel);box-shadow:0 12px 32px rgba(0,0,0,.35)">
+          <sc-for list="{{ regionList }}" as="r" hint-placeholder-count="4">
+            <div onClick="{{ r.toggle }}" style="display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:12.5px" style-hover="background:var(--raise)">
+              <span style="{{ r.boxStyle }}">{{ r.check }}</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px">{{ r.id }}</span>
+              <span style="margin-left:auto;color:var(--faint);font-size:11px">{{ r.count }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+
+    <div style="flex:1;display:flex;justify-content:center">
+      <div style="display:flex;align-items:center;gap:8px;width:420px;height:30px;padding:0 10px;border:1px solid var(--border);border-radius:7px;background:var(--panel2);color:var(--muted)" style-hover="border-color:var(--border2)">
+        <span style="font-size:12px;opacity:.7">⌕</span>
+        <span style="font-size:12.5px">Search ARN, name, or tag</span>
+        <span style="margin-left:auto;display:flex;gap:3px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:2px 5px;border:1px solid var(--border2);border-radius:4px">⌘</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:2px 5px;border:1px solid var(--border2);border-radius:4px">K</span>
+        </span>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:7px;height:30px;padding:0 10px;border:1px solid var(--border);border-radius:7px;background:var(--panel2)">
+      <span style="{{ syncDotStyle }}"></span>
+      <span style="font-size:12.5px;color:var(--muted)">{{ syncLabel }}</span>
+      <button onClick="{{ refresh }}" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0 0 0 2px;line-height:1" style-hover="color:var(--text)">
+        <span style="{{ spinStyle }}">⟳</span>
+      </button>
+    </div>
+    <button onClick="{{ reconnect }}" style="height:30px;padding:0 10px;border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--muted);font-family:inherit;font-size:12.5px;cursor:pointer" style-hover="color:var(--text);border-color:var(--border2)">Reconnect</button>
+    <button onClick="{{ toggleTheme }}" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--muted);cursor:pointer;font-size:12px" style-hover="color:var(--text);border-color:var(--border2)">{{ themeGlyph }}</button>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0">
+
+    <div style="{{ sidebarStyle }}">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 10px 8px 12px">
+        <sc-if value="{{ sidebarOpen }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)">Views</div>
+        </sc-if>
+        <button onClick="{{ toggleSidebar }}" style="width:22px;height:22px;border:1px solid var(--border);border-radius:5px;background:transparent;color:var(--muted);cursor:pointer;font-size:11px;line-height:1" style-hover="color:var(--text)">{{ sidebarGlyph }}</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px;padding:0 8px">
+        <sc-for list="{{ views }}" as="v" hint-placeholder-count="4">
+          <div onClick="{{ v.select }}" style="{{ v.style }}">
+            <span style="{{ v.dotStyle }}"></span>
+            <sc-if value="{{ sidebarOpen }}" hint-placeholder-val="{{ true }}">
+              <span>{{ v.label }}</span>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ sidebarOpen }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1;overflow-y:auto;padding:16px 12px 16px 12px;display:flex;flex-direction:column;gap:18px">
+          <div>
+            <div style="font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:8px">Service type</div>
+            <div style="display:flex;flex-direction:column;gap:1px">
+              <sc-for list="{{ serviceFilters }}" as="f" hint-placeholder-count="7">
+                <div onClick="{{ f.toggle }}" style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer" style-hover="background:var(--raise)">
+                  <span style="{{ f.boxStyle }}">{{ f.check }}</span>
+                  <span style="{{ f.swatchStyle }}"></span>
+                  <span style="font-size:12.5px;color:var(--text)">{{ f.label }}</span>
+                  <span style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint)">{{ f.count }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:8px">Tag filter</div>
+            <div style="display:flex;gap:6px">
+              <div style="flex:1;height:28px;display:flex;align-items:center;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--panel2);font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text)">Service</div>
+              <div style="flex:1;height:28px;display:flex;align-items:center;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--panel2);font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)">any value</div>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:8px">Environment</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              <sc-for list="{{ envChips }}" as="c" hint-placeholder-count="3">
+                <div onClick="{{ c.toggle }}" style="{{ c.style }}">{{ c.label }}</div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div onClick="{{ toggleUnconnected }}" style="display:flex;align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel2);cursor:pointer">
+            <span style="{{ hideUnconnectedTrack }}"><span style="{{ hideUnconnectedKnob }}"></span></span>
+            <span style="font-size:12.5px">Hide unconnected resources</span>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--canvas)">
+
+      <sc-if value="{{ showFirstRun }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;display:flex;align-items:center;justify-content:center;background-image:radial-gradient(var(--grid) 1px, transparent 1px);background-size:22px 22px">
+          <div style="width:520px;border:1px solid var(--border2);border-radius:12px;background:var(--panel);box-shadow:0 18px 48px rgba(0,0,0,.28);overflow:hidden">
+            <div style="padding:20px 22px 16px 22px;border-bottom:1px solid var(--border)">
+              <div style="font-size:16px;font-weight:600;margin-bottom:4px">Connect AWS profile</div>
+              <div style="font-size:12.5px;color:var(--muted);line-height:1.5">CloudAtlas reads profiles from <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text)">~/.aws/credentials</span> and never stores keys. Scanning is read-only.</div>
+            </div>
+            <div style="padding:18px 22px;display:flex;flex-direction:column;gap:14px">
+              <div>
+                <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">Profile</div>
+                <div onClick="{{ toggleProfiles }}" style="height:34px;display:flex;align-items:center;gap:8px;padding:0 10px;border:1px solid var(--border2);border-radius:7px;background:var(--panel2);cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px">
+                  <span>{{ profile }}</span>
+                  <span style="margin-left:auto;color:var(--faint);font-size:10px">▾</span>
+                </div>
+                <sc-if value="{{ profilesOpen }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:4px;padding:5px;border:1px solid var(--border2);border-radius:8px;background:var(--panel)">
+                    <sc-for list="{{ profiles }}" as="p" hint-placeholder-count="3">
+                      <div onClick="{{ p.select }}" style="display:flex;align-items:center;padding:6px 8px;border-radius:5px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px" style-hover="background:var(--raise)">
+                        <span>{{ p.name }}</span>
+                        <span style="margin-left:auto;color:var(--faint);font-size:11px">{{ p.account }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+
+              <div style="display:flex;gap:9px;padding:11px 12px;border:1px solid var(--border);border-radius:8px;background:var(--panel2)">
+                <span style="color:var(--warn);font-size:12px;line-height:1.5">◆</span>
+                <div style="font-size:12px;color:var(--muted);line-height:1.55">Attach the managed policy <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text)">ReadOnlyAccess</span>, or the scoped CloudAtlas read-only policy. Write permissions are never used.</div>
+              </div>
+
+              <sc-if value="{{ scanning }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:9px;padding-top:2px">
+                  <sc-for list="{{ scanRegions }}" as="s" hint-placeholder-count="3">
+                    <div>
+                      <div style="display:flex;align-items:center;margin-bottom:5px">
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px">{{ s.id }}</span>
+                        <span style="margin-left:auto;font-size:11px;color:var(--muted)">{{ s.status }}</span>
+                      </div>
+                      <div style="height:4px;border-radius:3px;background:var(--raise);overflow:hidden">
+                        <div style="{{ s.barStyle }}"></div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+              <div style="display:flex;align-items:center;gap:10px;padding-top:2px">
+                <button onClick="{{ startScan }}" style="height:34px;padding:0 16px;border:none;border-radius:7px;background:var(--text);color:var(--bg);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer" style-hover="opacity:.88">{{ scanLabel }}</button>
+                <span style="font-size:12px;color:var(--faint)">{{ scanHint }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showCanvas }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;flex:1;min-height:0">
+          <div style="height:38px;flex:0 0 38px;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid var(--border);background:var(--panel)">
+            <span style="font-size:12.5px;color:var(--muted)">{{ accountName }}</span>
+            <span style="color:var(--faint);font-size:11px">›</span>
+            <span style="font-size:12.5px;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:11.5px">us-east-1</span>
+            <span style="color:var(--faint);font-size:11px">›</span>
+            <span style="font-size:12.5px;font-weight:600">prod-vpc</span>
+            <span style="margin-left:14px;font-size:11.5px;color:var(--faint)">{{ focusCount }}</span>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+              <sc-for list="{{ legend }}" as="l" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--panel2)">
+                  <svg width="20" height="6"><line x1="0" y1="3" x2="20" y2="3" stroke="{{ l.color }}" stroke-width="1.6" stroke-dasharray="{{ l.dash }}"></line></svg>
+                  <span style="font-size:11px;color:var(--muted)">{{ l.label }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="position:relative;flex:1;min-height:0;overflow:hidden;background-image:radial-gradient(var(--grid) 1px, transparent 1px);background-size:22px 22px">
+            <div style="{{ stageStyle }}">
+              <div style="position:absolute;left:0;top:0;width:1240px;height:764px">
+
+                <div style="position:absolute;left:12px;top:8px;font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)">Edge &amp; global services</div>
+                <div style="position:absolute;left:40px;top:130px;width:1060px;height:600px;border:1px solid var(--border2);border-radius:10px;background:rgba(127,140,155,0.035)"></div>
+                <div style="position:absolute;left:52px;top:138px;display:flex;align-items:center;gap:7px">
+                  <span style="width:14px;height:14px;border-radius:4px;background:#232F3E;display:flex;align-items:center;justify-content:center;font-size:7px;color:#fff;font-family:'JetBrains Mono',monospace">R</span>
+                  <span style="font-size:11.5px;font-weight:600;color:var(--muted)">Region · us-east-1</span>
+                </div>
+
+                <div style="position:absolute;left:66px;top:172px;width:1008px;height:544px;border:1.5px dashed #8C4FFF;border-radius:10px;background:rgba(140,79,255,0.045)"></div>
+                <div style="position:absolute;left:78px;top:180px;display:flex;align-items:center;gap:7px">
+                  <span style="width:14px;height:14px;border-radius:4px;background:#8C4FFF;display:flex;align-items:center;justify-content:center;font-size:7px;color:#fff;font-family:'JetBrains Mono',monospace">V</span>
+                  <span style="font-size:11.5px;font-weight:600;color:#a77dff">prod-vpc</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint)">10.0.0.0/16</span>
+                  <span style="padding:1px 6px;border:1px solid var(--border2);border-radius:20px;font-size:10px;color:var(--muted)">14 resources</span>
+                </div>
+
+                <div style="position:absolute;left:88px;top:212px;width:480px;height:492px;border:1px dashed var(--border2);border-radius:9px"></div>
+                <div style="position:absolute;left:100px;top:220px;font-size:10.5px;font-weight:600;color:var(--faint);letter-spacing:.04em">AZ us-east-1a</div>
+                <div style="position:absolute;left:576px;top:212px;width:480px;height:492px;border:1px dashed var(--border2);border-radius:9px"></div>
+                <div style="position:absolute;left:588px;top:220px;font-size:10.5px;font-weight:600;color:var(--faint);letter-spacing:.04em">AZ us-east-1b</div>
+
+                <div style="position:absolute;left:102px;top:244px;width:452px;height:146px;border:1px solid rgba(122,161,22,0.45);border-radius:8px;background:rgba(122,161,22,0.075)"></div>
+                <div style="position:absolute;left:112px;top:250px;font-size:10.5px;font-weight:600;color:#93b83a">Public subnet · 10.0.1.0/24</div>
+                <div style="position:absolute;left:590px;top:244px;width:452px;height:146px;border:1px solid rgba(122,161,22,0.45);border-radius:8px;background:rgba(122,161,22,0.075)"></div>
+                <div style="position:absolute;left:600px;top:250px;font-size:10.5px;font-weight:600;color:#93b83a">Public subnet · 10.0.2.0/24</div>
+
+                <div style="position:absolute;left:102px;top:406px;width:452px;height:282px;border:1px solid rgba(59,130,246,0.45);border-radius:8px;background:rgba(59,130,246,0.075)"></div>
+                <div style="position:absolute;left:112px;top:412px;font-size:10.5px;font-weight:600;color:#6fa8ff">Private subnet · 10.0.11.0/24</div>
+                <div style="position:absolute;left:590px;top:406px;width:452px;height:282px;border:1px solid rgba(59,130,246,0.45);border-radius:8px;background:rgba(59,130,246,0.075)"></div>
+                <div style="position:absolute;left:600px;top:412px;font-size:10.5px;font-weight:600;color:#6fa8ff">Private subnet · 10.0.12.0/24</div>
+
+                <svg width="1240" height="764" style="position:absolute;left:0;top:0;pointer-events:none">
+                  <sc-for list="{{ edges }}" as="e" hint-placeholder-count="10">
+                    <path d="{{ e.d }}" fill="none" stroke="{{ e.color }}" stroke-width="{{ e.width }}" stroke-dasharray="{{ e.dash }}" opacity="{{ e.opacity }}"></path>
+                  </sc-for>
+                  <sc-for list="{{ edgeLabels }}" as="e" hint-placeholder-count="0">
+                    <g opacity="{{ e.opacity }}">
+                      <rect x="{{ e.rx }}" y="{{ e.ry }}" width="{{ e.rw }}" height="16" rx="4" fill="{{ e.bg }}" stroke="{{ e.color }}" stroke-width="1"></rect>
+                      <text x="{{ e.tx }}" y="{{ e.ty }}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="{{ e.textColor }}">{{ e.label }}</text>
+                    </g>
+                  </sc-for>
+                </svg>
+
+                <sc-for list="{{ nodes }}" as="n" hint-placeholder-count="16">
+                  <div onClick="{{ n.select }}" onMouseEnter="{{ n.enter }}" onMouseLeave="{{ n.leave }}" style="{{ n.style }}">
+                    <div style="{{ n.tileStyle }}">{{ n.abbr }}</div>
+                    <div style="{{ n.labelStyle }}">{{ n.label }}</div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--faint);margin-top:1px;line-height:1.2">{{ n.sub }}</div>
+                    <sc-if value="{{ n.warn }}" hint-placeholder-val="{{ false }}">
+                      <div style="position:absolute;top:-6px;right:14px;padding:1px 5px;border-radius:20px;background:var(--bad);color:#fff;font-size:9px;font-weight:700;letter-spacing:.02em">!</div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="position:absolute;left:14px;bottom:14px;display:flex;gap:6px">
+              <div style="display:flex;border:1px solid var(--border2);border-radius:8px;background:var(--panel);overflow:hidden">
+                <button onClick="{{ zoomOut }}" style="width:30px;height:30px;border:none;border-right:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:14px" style-hover="color:var(--text);background:var(--raise)">−</button>
+                <div style="width:52px;height:30px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);border-right:1px solid var(--border)">{{ zoomLabel }}</div>
+                <button onClick="{{ zoomIn }}" style="width:30px;height:30px;border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:14px" style-hover="color:var(--text);background:var(--raise)">+</button>
+              </div>
+              <button onClick="{{ fit }}" style="height:30px;padding:0 11px;border:1px solid var(--border2);border-radius:8px;background:var(--panel);color:var(--muted);font-family:inherit;font-size:12px;cursor:pointer" style-hover="color:var(--text)">Fit</button>
+              <button onClick="{{ fit }}" style="height:30px;padding:0 11px;border:1px solid var(--border2);border-radius:8px;background:var(--panel);color:var(--muted);font-family:inherit;font-size:12px;cursor:pointer" style-hover="color:var(--text)">Auto-layout</button>
+              <div style="display:flex;border:1px solid var(--border2);border-radius:8px;background:var(--panel);overflow:hidden">
+                <div style="height:30px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);border-right:1px solid var(--border)">Export</div>
+                <button style="height:30px;padding:0 9px;border:none;border-right:1px solid var(--border);background:transparent;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer" style-hover="color:var(--text);background:var(--raise)">PNG</button>
+                <button style="height:30px;padding:0 9px;border:none;background:transparent;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer" style-hover="color:var(--text);background:var(--raise)">SVG</button>
+              </div>
+            </div>
+
+            <sc-if value="{{ riskBanner }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;left:14px;top:14px;display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid rgba(242,85,90,.45);border-radius:9px;background:var(--panel);box-shadow:0 8px 24px rgba(0,0,0,.25)">
+                <span style="width:18px;height:18px;border-radius:5px;background:var(--bad);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">!</span>
+                <div>
+                  <div style="font-size:12.5px;font-weight:600">1 risky rule · sg-legacy-worker</div>
+                  <div style="font-size:11.5px;color:var(--muted);font-family:'JetBrains Mono',monospace">0.0.0.0/0 → tcp/22 (SSH) open to the internet</div>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ sshOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;left:0;right:0;bottom:0;height:252px;border-top:1px solid var(--border2);background:var(--panel);display:flex;flex-direction:column;z-index:20;box-shadow:0 -14px 34px rgba(0,0,0,.28)">
+                <div style="height:34px;flex:0 0 34px;display:flex;align-items:center;gap:9px;padding:0 12px;border-bottom:1px solid var(--border)">
+                  <span style="{{ sshStatusStyle }}"></span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted)">{{ sshTitle }}</span>
+                  <span style="padding:1px 7px;border:1px solid var(--border2);border-radius:20px;font-size:10px;color:var(--faint)">read-only IAM · session logged</span>
+                  <button onClick="{{ closeSsh }}" style="margin-left:auto;border:none;background:none;color:var(--faint);cursor:pointer;font-size:13px" style-hover="color:var(--text)">✕</button>
+                </div>
+                <div style="flex:1;overflow-y:auto;padding:11px 14px;font-family:'JetBrains Mono',monospace;font-size:11.5px;background:var(--canvas)">
+                  <sc-for list="{{ sshLines }}" as="l" hint-placeholder-count="0">
+                    <div style="{{ l.style }}">{{ l.text }}<sc-if value="{{ l.caret }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;width:7px;height:13px;background:var(--text);vertical-align:-2px;animation:ca-blink 1s steps(1) infinite"></span></sc-if></div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <div style="position:absolute;right:14px;bottom:14px;width:190px;height:126px;border:1px solid var(--border2);border-radius:8px;background:var(--panel);overflow:hidden">
+              <div style="position:absolute;left:8px;top:6px;font-size:9.5px;color:var(--faint);letter-spacing:.06em;text-transform:uppercase">Minimap</div>
+              <div style="position:absolute;left:10px;top:22px;width:170px;height:96px">
+                <div style="position:absolute;left:4px;top:18px;width:160px;height:76px;border:1px solid var(--border2);border-radius:3px"></div>
+                <sc-for list="{{ miniNodes }}" as="m" hint-placeholder-count="16">
+                  <div style="{{ m.style }}"></div>
+                </sc-for>
+                <div style="position:absolute;left:0;top:10px;width:132px;height:84px;border:1px solid #8C4FFF;border-radius:3px;background:rgba(140,79,255,.10)"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showInventory }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;min-height:0;display:flex;flex-direction:column">
+          <div style="height:38px;flex:0 0 38px;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--border);background:var(--panel)">
+            <span style="font-size:12.5px;font-weight:600">Inventory</span>
+            <span style="font-size:11.5px;color:var(--faint)">{{ focusCount }}</span>
+            <span style="margin-left:auto;font-size:11.5px;color:var(--muted)">Monthly est. total</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600">{{ totalCost }}</span>
+          </div>
+          <div style="flex:1;overflow:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+              <thead>
+                <tr>
+                  <sc-for list="{{ columns }}" as="c" hint-placeholder-count="7">
+                    <th onClick="{{ c.sort }}" style="{{ c.style }}">
+                      <span>{{ c.label }}</span>
+                      <span style="color:var(--faint);font-size:9px;margin-left:5px">{{ c.arrow }}</span>
+                    </th>
+                  </sc-for>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{ rows }}" as="r" hint-placeholder-count="14">
+                  <tr onClick="{{ r.select }}" style="{{ r.style }}">
+                    <td style="padding:0 14px;height:40px;border-bottom:1px solid var(--border)">
+                      <div style="display:flex;align-items:center;gap:9px">
+                        <span style="{{ r.dotStyle }}">{{ r.abbr }}</span>
+                        <span style="font-weight:550">{{ r.name }}</span>
+                      </div>
+                    </td>
+                    <td style="padding:0 14px;border-bottom:1px solid var(--border);color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:11.5px">{{ r.type }}</td>
+                    <td style="padding:0 14px;border-bottom:1px solid var(--border);color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:11.5px">{{ r.region }}</td>
+                    <td style="padding:0 14px;border-bottom:1px solid var(--border);color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:11.5px">{{ r.vpc }}</td>
+                    <td style="padding:0 14px;border-bottom:1px solid var(--border)"><span style="{{ r.stateStyle }}">{{ r.state }}</span></td>
+                    <td style="padding:0 14px;border-bottom:1px solid var(--border)">
+                      <div style="display:flex;gap:5px">
+                        <sc-for list="{{ r.tags }}" as="t" hint-placeholder-count="2">
+                          <span style="padding:2px 7px;border:1px solid var(--border2);border-radius:5px;background:var(--chip);font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted);white-space:nowrap">{{ t }}</span>
+                        </sc-for>
+                      </div>
+                    </td>
+                    <td style="padding:0 14px;border-bottom:1px solid var(--border);text-align:right;font-family:'JetBrains Mono',monospace;font-size:11.5px">{{ r.cost }}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{ showPanel }}" hint-placeholder-val="{{ true }}">
+      <div style="width:372px;flex:0 0 372px;border-left:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column;min-height:0">
+        <div style="padding:14px 16px 12px 16px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;align-items:flex-start;gap:11px">
+            <div style="{{ detail.tileStyle }}">{{ detail.abbr }}</div>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:14.5px;font-weight:600">{{ detail.label }}</span>
+                <span style="{{ detail.stateStyle }}">{{ detail.state }}</span>
+              </div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">{{ detail.type }} · {{ detail.az }}</div>
+            </div>
+            <button onClick="{{ closePanel }}" style="border:none;background:none;color:var(--faint);cursor:pointer;font-size:14px;line-height:1" style-hover="color:var(--text)">✕</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--panel2)">
+            <span style="flex:1;min-width:0;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ detail.arn }}</span>
+            <button onClick="{{ copyArn }}" style="border:1px solid var(--border2);border-radius:5px;background:transparent;color:var(--muted);cursor:pointer;font-size:10.5px;padding:2px 7px;font-family:inherit" style-hover="color:var(--text)">{{ copyLabel }}</button>
+          </div>
+          <sc-if value="{{ detail.canSsh }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ openSsh }}" style="width:100%;margin-top:9px;height:32px;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--border2);border-radius:7px;background:var(--raise);color:var(--text);font-family:inherit;font-size:12.5px;font-weight:550;cursor:pointer" style-hover="border-color:var(--text)">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)">▸_</span>
+              <span>Connect via SSH (Session Manager)</span>
+            </button>
+          </sc-if>
+        </div>
+
+        <div style="display:flex;gap:1px;padding:6px 8px;border-bottom:1px solid var(--border)">
+          <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+            <div onClick="{{ t.select }}" style="{{ t.style }}">{{ t.label }}</div>
+          </sc-for>
+        </div>
+
+        <div style="flex:1;overflow-y:auto;padding:14px 16px 18px 16px">
+          <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:0">
+              <sc-for list="{{ detail.props }}" as="p" hint-placeholder-count="6">
+                <div style="display:flex;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)">
+                  <div style="width:112px;flex:0 0 112px;font-size:12px;color:var(--muted)">{{ p.k }}</div>
+                  <div style="flex:1;font-family:'JetBrains Mono',monospace;font-size:11.5px;word-break:break-all">{{ p.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <a href="#" style="display:inline-flex;align-items:center;gap:6px;margin-top:14px;font-size:12.5px">Open in AWS Console <span style="font-size:10px">↗</span></a>
+          </sc-if>
+
+          <sc-if value="{{ isMetrics }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:12px">
+              <span style="{{ liveDotStyle }}"></span>
+              <span style="font-size:11.5px;color:var(--muted)">CloudWatch · 1-minute resolution</span>
+              <button onClick="{{ toggleLive }}" style="margin-left:auto;height:24px;padding:0 9px;border:1px solid var(--border2);border-radius:6px;background:transparent;color:var(--muted);font-family:inherit;font-size:11px;cursor:pointer" style-hover="color:var(--text)">{{ liveLabel }}</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <sc-for list="{{ detail.metrics }}" as="m" hint-placeholder-count="3">
+                <div style="padding:10px 11px 6px 11px;border:1px solid var(--border);border-radius:9px;background:var(--panel2)">
+                  <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
+                    <span style="font-size:11.5px;color:var(--muted)">{{ m.name }}</span>
+                    <span style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500">{{ m.value }}</span>
+                    <span style="{{ m.deltaStyle }}">{{ m.delta }}</span>
+                  </div>
+                  <svg width="306" height="42" style="display:block">
+                    <path d="{{ m.area }}" fill="{{ m.fill }}" stroke="none"></path>
+                    <path d="{{ m.d }}" fill="none" stroke="{{ m.color }}" stroke-width="1.5" stroke-linejoin="round"></path>
+                  </svg>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isConnections }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div>
+                <div style="font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:7px">Inbound</div>
+                <sc-for list="{{ detail.inbound }}" as="c" hint-placeholder-count="2">
+                  <div onClick="{{ c.select }}" style="display:flex;align-items:center;gap:9px;padding:8px 9px;border:1px solid var(--border);border-radius:7px;background:var(--panel2);margin-bottom:6px;cursor:pointer" style-hover="border-color:var(--border2)">
+                    <span style="{{ c.dotStyle }}">{{ c.abbr }}</span>
+                    <span style="font-size:12.5px">{{ c.label }}</span>
+                    <span style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted)">{{ c.detail }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div>
+                <div style="font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:7px">Outbound</div>
+                <sc-for list="{{ detail.outbound }}" as="c" hint-placeholder-count="2">
+                  <div onClick="{{ c.select }}" style="display:flex;align-items:center;gap:9px;padding:8px 9px;border:1px solid var(--border);border-radius:7px;background:var(--panel2);margin-bottom:6px;cursor:pointer" style-hover="border-color:var(--border2)">
+                    <span style="{{ c.dotStyle }}">{{ c.abbr }}</span>
+                    <span style="font-size:12.5px">{{ c.label }}</span>
+                    <span style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted)">{{ c.detail }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isSecurity }}" hint-placeholder-val="{{ false }}">
+            <div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:9px">{{ detail.sgName }}</div>
+              <table style="width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:11px">
+                <thead>
+                  <tr>
+                    <th style="text-align:left;padding:0 8px 7px 0;font-weight:500;color:var(--faint);font-family:Inter,sans-serif;font-size:11px">Dir</th>
+                    <th style="text-align:left;padding:0 8px 7px 0;font-weight:500;color:var(--faint);font-family:Inter,sans-serif;font-size:11px">Proto</th>
+                    <th style="text-align:left;padding:0 8px 7px 0;font-weight:500;color:var(--faint);font-family:Inter,sans-serif;font-size:11px">Port</th>
+                    <th style="text-align:left;padding:0 0 7px 0;font-weight:500;color:var(--faint);font-family:Inter,sans-serif;font-size:11px">Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <sc-for list="{{ detail.sgRules }}" as="r" hint-placeholder-count="3">
+                    <tr>
+                      <td style="{{ r.cell }}">{{ r.dir }}</td>
+                      <td style="{{ r.cell }}">{{ r.proto }}</td>
+                      <td style="{{ r.cell }}">{{ r.port }}</td>
+                      <td style="{{ r.cellLast }}">{{ r.source }}</td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isTags }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:0">
+              <sc-for list="{{ detail.tagPairs }}" as="t" hint-placeholder-count="4">
+                <div style="display:flex;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)">
+                  <div style="width:112px;flex:0 0 112px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted)">{{ t.k }}</div>
+                  <div style="flex:1;font-family:'JetBrains Mono',monospace;font-size:11.5px">{{ t.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isJson }}" hint-placeholder-val="{{ false }}">
+            <pre style="margin:0;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--panel2);font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.6;color:var(--muted);white-space:pre-wrap;word-break:break-all">{{ detail.json }}</pre>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:920},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;'dark'|'light'&quot;},&quot;showEdgeLabels&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;accountName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;prod&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;accountId&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;4821-7730-1192&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+const CAT = {
+  compute: '#ED7100', network: '#8C4FFF', database: '#3B82F6',
+  storage: '#7AA116', integration: '#E7157B', security: '#DD344C'
+};
+const ACCT = '482177301192';
+
+const NODES = [
+  { id:'route53', label:'cortex.health.gov.gy', sub:'Route 53', abbr:'R53', cat:'network', type:'Route 53 hosted zone', x:100, y:78, az:'global', state:'active', cost:0.5, svc:'route53', res:'hostedzone/Z3PQ21AEXAMPLE' },
+  { id:'waf', label:'cortex-waf', sub:'WAF web ACL', abbr:'WAF', cat:'security', type:'WAF v2 web ACL', x:240, y:78, az:'global', state:'active', cost:47, svc:'wafv2', res:'global/webacl/cortex-waf/8f21' },
+  { id:'cloudfront', label:'d2f9k1x.cloudfront.net', sub:'CloudFront', abbr:'CF', cat:'network', type:'CloudFront distribution', x:380, y:78, az:'global', state:'deployed', cost:214, svc:'cloudfront', res:'distribution/E1H7QK2LM9ZT' },
+  { id:'s3-assets', label:'prod-assets', sub:'S3', abbr:'S3', cat:'storage', type:'S3 bucket', x:520, y:78, az:'us-east-1', state:'active', cost:38, svc:'s3', res:'prod-assets' },
+  { id:'s3-uploads', label:'prod-uploads', sub:'S3', abbr:'S3', cat:'storage', type:'S3 bucket', x:650, y:78, az:'us-east-1', state:'active', cost:61, svc:'s3', res:'prod-uploads' },
+  { id:'lambda', label:'image-resize', sub:'Lambda', abbr:'λ', cat:'compute', type:'Lambda function', x:780, y:78, az:'us-east-1', state:'active', cost:27, svc:'lambda', res:'function:image-resize' },
+  { id:'sqs', label:'resize-jobs', sub:'SQS', abbr:'SQS', cat:'integration', type:'SQS queue', x:910, y:78, az:'us-east-1', state:'active', cost:4, svc:'sqs', res:'resize-jobs' },
+  { id:'iam', label:'cortex-roles', sub:'IAM', abbr:'IAM', cat:'security', type:'IAM role set', x:1040, y:78, az:'global', state:'active', cost:0, svc:'iam', res:'role/cortex-api-task' },
+
+  { id:'alb', label:'api-alb', sub:'ALB · 10.0.1.24', abbr:'ALB', cat:'network', type:'Application Load Balancer', x:180, y:322, az:'us-east-1a', state:'active', cost:26, svc:'elasticloadbalancing', res:'loadbalancer/app/api-alb/9d2c' },
+  { id:'nat-a', label:'nat-1a', sub:'NAT GW · 10.0.1.9', abbr:'NAT', cat:'network', type:'NAT Gateway', x:330, y:322, az:'us-east-1a', state:'available', cost:33, svc:'ec2', res:'natgateway/nat-04c1a' },
+  { id:'fw-a', label:'netfw-1a', sub:'Firewall endpoint', abbr:'FW', cat:'security', type:'Network Firewall endpoint', x:480, y:322, az:'us-east-1a', state:'ready', cost:196, svc:'network-firewall', res:'firewall/prod-netfw' },
+  { id:'nat-b', label:'nat-1b', sub:'NAT GW · 10.0.2.9', abbr:'NAT', cat:'network', type:'NAT Gateway', x:670, y:322, az:'us-east-1b', state:'available', cost:33, svc:'ec2', res:'natgateway/nat-07f3b' },
+  { id:'fw-b', label:'netfw-1b', sub:'Firewall endpoint', abbr:'FW', cat:'security', type:'Network Firewall endpoint', x:810, y:322, az:'us-east-1b', state:'ready', cost:196, svc:'network-firewall', res:'firewall/prod-netfw' },
+  { id:'ec2-legacy', label:'legacy-worker', sub:'t3.large · stopped', abbr:'EC2', cat:'compute', type:'EC2 instance', x:950, y:322, az:'us-east-1b', state:'stopped', cost:0, svc:'ec2', res:'instance/i-0af22c9e13b7', warnSg:true, ssh:true },
+
+  { id:'ecs-1', label:'api-service/1', sub:'10.0.11.41', abbr:'ECS', cat:'compute', type:'ECS Fargate task', x:180, y:478, az:'us-east-1a', state:'running', cost:88, svc:'ecs', res:'task/prod/1c93' },
+  { id:'ecs-2', label:'api-service/2', sub:'10.0.11.58', abbr:'ECS', cat:'compute', type:'ECS Fargate task', x:330, y:478, az:'us-east-1a', state:'running', cost:88, svc:'ecs', res:'task/prod/4a71' },
+  { id:'redis', label:'cortex-cache', sub:'cache.r6g.large', abbr:'EC$', cat:'database', type:'ElastiCache Redis node', x:480, y:478, az:'us-east-1a', state:'available', cost:112, svc:'elasticache', res:'cluster:cortex-cache-001' },
+  { id:'ecs-3', label:'api-service/3', sub:'10.0.12.33', abbr:'ECS', cat:'compute', type:'ECS Fargate task', x:680, y:478, az:'us-east-1b', state:'running', cost:88, svc:'ecs', res:'task/prod/8b20' },
+
+  { id:'rds-primary', label:'prod-pg-primary', sub:'db.r6g.2xlarge', abbr:'RDS', cat:'database', type:'RDS PostgreSQL instance', x:300, y:620, az:'us-east-1a', state:'available', cost:642, svc:'rds', res:'db:prod-pg-primary' },
+  { id:'rds-standby', label:'prod-pg-standby', sub:'read replica', abbr:'RDS', cat:'database', type:'RDS PostgreSQL replica', x:800, y:620, az:'us-east-1b', state:'available', cost:642, svc:'rds', res:'db:prod-pg-standby' }
+];
+
+const EDGES = [
+  { a:'route53', b:'cloudfront', kind:'traffic', port:'443' },
+  { a:'waf', b:'cloudfront', kind:'sg', port:'inspect' },
+  { a:'nat-a', b:'fw-a', kind:'traffic', port:'egress' },
+  { a:'nat-b', b:'fw-b', kind:'traffic', port:'egress' },
+  { a:'cloudfront', b:'s3-assets', kind:'traffic', port:'443' },
+  { a:'cloudfront', b:'alb', kind:'traffic', port:'443' },
+  { a:'alb', b:'ecs-1', kind:'traffic', port:'8080' },
+  { a:'alb', b:'ecs-2', kind:'traffic', port:'8080' },
+  { a:'alb', b:'ecs-3', kind:'traffic', port:'8080' },
+  { a:'ecs-1', b:'rds-primary', kind:'traffic', port:'5432' },
+  { a:'ecs-2', b:'rds-primary', kind:'traffic', port:'5432' },
+  { a:'ecs-3', b:'rds-primary', kind:'traffic', port:'5432' },
+  { a:'ecs-1', b:'redis', kind:'sg', port:'6379' },
+  { a:'ecs-3', b:'redis', kind:'sg', port:'6379' },
+  { a:'rds-primary', b:'rds-standby', kind:'sg', port:'5432' },
+  { a:'ecs-1', b:'nat-a', kind:'sg', port:'443' },
+  { a:'ecs-3', b:'nat-b', kind:'sg', port:'443' },
+  { a:'s3-uploads', b:'lambda', kind:'event', port:'s3:ObjectCreated' },
+  { a:'lambda', b:'sqs', kind:'event', port:'sendMessage' },
+  { a:'lambda', b:'s3-assets', kind:'event', port:'putObject' },
+  { a:'internet', b:'ec2-legacy', kind:'risk', port:'22' }
+];
+
+const SG = {
+  'rds-primary': { name:'sg-prod-pg (sg-0b41c7e2)', rules:[
+    { dir:'in', proto:'tcp', port:'5432', source:'sg-api-tasks' },
+    { dir:'in', proto:'tcp', port:'5432', source:'sg-bastion' },
+    { dir:'out', proto:'all', port:'all', source:'0.0.0.0/0' }
+  ]},
+  'ec2-legacy': { name:'sg-legacy-worker (sg-0e91aa30)', rules:[
+    { dir:'in', proto:'tcp', port:'22', source:'0.0.0.0/0', risk:true },
+    { dir:'in', proto:'tcp', port:'8080', source:'sg-api-tasks' },
+    { dir:'out', proto:'all', port:'all', source:'0.0.0.0/0' }
+  ]},
+  'alb': { name:'sg-alb-public (sg-0d17f3aa)', rules:[
+    { dir:'in', proto:'tcp', port:'443', source:'0.0.0.0/0' },
+    { dir:'in', proto:'tcp', port:'80', source:'0.0.0.0/0' },
+    { dir:'out', proto:'tcp', port:'8080', source:'sg-api-tasks' }
+  ]},
+  'ecs-1': { name:'sg-api-tasks (sg-02cc91b4)', rules:[
+    { dir:'in', proto:'tcp', port:'8080', source:'sg-alb-public' },
+    { dir:'out', proto:'tcp', port:'5432', source:'sg-prod-pg' },
+    { dir:'out', proto:'tcp', port:'6379', source:'sg-cortex-cache' },
+    { dir:'out', proto:'tcp', port:'443', source:'0.0.0.0/0' }
+  ]},
+  'redis': { name:'sg-cortex-cache (sg-0771be05)', rules:[
+    { dir:'in', proto:'tcp', port:'6379', source:'sg-api-tasks' },
+    { dir:'out', proto:'all', port:'all', source:'0.0.0.0/0' }
+  ]},
+  'fw-a': { name:'prod-netfw · stateful rule group', rules:[
+    { dir:'in', proto:'tcp', port:'443', source:'pass · TLS SNI allowlist' },
+    { dir:'in', proto:'tcp', port:'any', source:'drop · threat intel feed' },
+    { dir:'out', proto:'udp', port:'53', source:'alert · DNS exfil signature' }
+  ]},
+  'waf': { name:'cortex-waf · web ACL rules', rules:[
+    { dir:'in', proto:'http', port:'443', source:'AWSManagedRulesCommonRuleSet' },
+    { dir:'in', proto:'http', port:'443', source:'rate-limit 2000 req/5min' },
+    { dir:'in', proto:'http', port:'443', source:'geo-block: RU, KP' }
+  ]}
+};
+SG['ecs-2'] = SG['ecs-1']; SG['ecs-3'] = SG['ecs-1']; SG['fw-b'] = SG['fw-a'];
+
+const METRICS = {
+  compute: [['CPUUtilization','%',38,14],['MemoryUtilization','%',61,8],['NetworkIn','MB/s',12,6]],
+  database: [['CPUUtilization','%',44,10],['DatabaseConnections','',183,26],['ReadLatency','ms',2.4,0.9]],
+  network: [['RequestCount','/min',8400,1600],['TargetResponseTime','ms',94,22],['HTTPCode_5XX','',1,1]],
+  storage: [['BucketSizeBytes','GB',412,3],['AllRequests','/min',2600,700],['4xxErrors','',2,2]],
+  integration: [['ApproximateNumberOfMessagesVisible','',34,18],['NumberOfMessagesSent','/min',210,60],['AgeOfOldestMessage','s',7,4]],
+  security: [['BlockedRequests','/min',126,48],['AllowedRequests','/min',7900,900],['DroppedPackets','/min',18,12]]
+};
+
+const PROPS = {
+  'rds-primary': [
+    ['Engine','PostgreSQL 15.4'], ['Instance class','db.r6g.2xlarge'],
+    ['Storage','1024 GiB gp3 · 12000 IOPS'], ['Multi-AZ','Enabled (us-east-1b)'],
+    ['Endpoint','prod-pg-primary.c9xk2.us-east-1.rds.amazonaws.com'],
+    ['Port','5432'], ['Private IP','10.0.11.90'], ['Backup window','03:10–03:40 UTC · 35 days'],
+    ['Encryption','KMS · aws/rds'], ['Created','2024-02-11']
+  ],
+  'ec2-legacy': [
+    ['Instance ID','i-0af22c9e13b7d4410'], ['Instance type','t3.large · 2 vCPU / 8 GiB'],
+    ['State','stopped since 2026-08-30 14:02 UTC'],
+    ['Private IPv4','10.0.2.66'], ['Public IPv4','— (released)'],
+    ['ENI','eni-0b7712ff · subnet-0c9a21 (10.0.2.0/24)'],
+    ['Security groups','sg-legacy-worker'], ['IAM role','cortex-legacy-worker'],
+    ['AMI','ami-0c94b1d2 (AL2023 kernel 6.1)'], ['Key pair','ops-legacy'],
+    ['EBS','root 80 GiB gp3 · vol-0aa31c7e'], ['IMDS','v1 and v2 allowed'],
+    ['Route table','rtb-0918cc · 0.0.0.0/0 → igw-04b1']
+  ],
+  'alb': [
+    ['DNS name','api-alb-1932741.us-east-1.elb.amazonaws.com'], ['Scheme','internet-facing'],
+    ['Listeners','443 (TLS 1.3) → tg-api, 80 → redirect'], ['Target group','tg-api · 3/3 healthy'],
+    ['Subnets','subnet-0a12 (10.0.1.0/24), subnet-0b34 (10.0.2.0/24)'],
+    ['Node IPs','10.0.1.24, 10.0.2.31'], ['Security groups','sg-alb-public'],
+    ['WAF','cortex-waf attached'], ['Idle timeout','60s'], ['Access logs','s3://prod-logs/alb/']
+  ],
+  'ecs-1': [
+    ['Task ARN suffix','1c93f0a8e2'], ['Task definition','cortex-api:184'],
+    ['Launch type','Fargate · 1 vCPU / 2 GB'], ['Image','482177301192.dkr.ecr.us-east-1.amazonaws.com/cortex-api:2026.09.3'],
+    ['Private IPv4','10.0.11.41'], ['ENI','eni-0c41aa93'], ['Security groups','sg-api-tasks'],
+    ['Task role','cortex-api-task'], ['Execution role','ecsTaskExecutionRole'],
+    ['Started','2026-09-18 08:41 UTC'], ['Health','HEALTHY · /healthz 200']
+  ],
+  'redis': [
+    ['Engine','Redis 7.1 · cluster mode off'], ['Node type','cache.r6g.large'],
+    ['Primary endpoint','cortex-cache.9xk2.0001.use1.cache.amazonaws.com:6379'],
+    ['Private IPv4','10.0.11.120'], ['Replicas','1 (us-east-1b)'],
+    ['Security groups','sg-cortex-cache'], ['Encryption','in-transit + at-rest'],
+    ['Maintenance','sun 05:00–06:00 UTC']
+  ],
+  'waf': [
+    ['Scope','CLOUDFRONT'], ['Associated','d2f9k1x.cloudfront.net, api-alb'],
+    ['Rules','3 managed, 2 custom'], ['Default action','Allow'],
+    ['Rate limit','2000 req / 5 min per IP'], ['Blocked (1h)','7,412'],
+    ['Logging','kinesis-firehose → s3://prod-logs/waf/']
+  ],
+  'fw-a': [
+    ['Firewall','prod-netfw'], ['Endpoint','vpce-0c81aa3f · subnet-0a12'],
+    ['Policy','prod-netfw-policy'], ['Stateful groups','threat-intel, tls-sni-allowlist'],
+    ['Stateless groups','drop-invalid'], ['Home net','10.0.0.0/16'],
+    ['Alerts (1h)','23'], ['Logging','cloudwatch:/aws/network-firewall/prod']
+  ],
+  'lambda': [
+    ['Runtime','python3.12 · arm64'], ['Memory','1024 MB · timeout 30s'],
+    ['Trigger','s3:ObjectCreated:* on prod-uploads'], ['Concurrency','reserved 50'],
+    ['VPC','none (public egress)'], ['Role','cortex-image-resize'],
+    ['Last deploy','2026-09-12 · $LATEST'], ['Errors (24h)','3 (0.02%)']
+  ]
+};
+
+const REGIONS = [
+  { id:'us-east-1', count:17 }, { id:'us-west-2', count:6 },
+  { id:'eu-west-1', count:3 }, { id:'ap-southeast-2', count:0 }
+];
+
+const SERVICES = [
+  { key:'compute', label:'Compute', count:5 }, { key:'network', label:'Networking', count:5 },
+  { key:'database', label:'Database', count:3 }, { key:'storage', label:'Storage', count:2 },
+  { key:'integration', label:'Integration', count:1 }, { key:'security', label:'Security & identity', count:4 }
+];
+
+class Component extends DCLogic {
+  state = {
+    theme: this.props.theme || 'dark',
+    view: 'topology',
+    selected: 'rds-primary',
+    tab: 'overview',
+    hover: null,
+    zoom: 0.64,
+    sidebarOpen: true,
+    regionsOpen: false,
+    profilesOpen: false,
+    regions: ['us-east-1','us-west-2'],
+    services: SERVICES.map(s => s.key),
+    envs: ['prod'],
+    hideUnconnected: false,
+    firstRun: false,
+    scanning: false,
+    progress: 0,
+    profile: 'cortex-prod',
+    copied: false,
+    syncing: false,
+    sort: { key:'cost', dir:'desc' },
+    series: [0,1,2].map(() => { let v = 0.5; return Array.from({length:44}, () => { v = Math.max(0.06, Math.min(0.94, v + (Math.random()-0.5)*0.22)); return v; }); }),
+    live: true,
+    ssh: { open:false, lines:[], connecting:false }
+  };
+
+  componentDidMount() {
+    this._m = setInterval(() => {
+      if (!this.state.live) return;
+      this.setState(s => ({ series: s.series.map(a => {
+        const v = Math.max(0.06, Math.min(0.94, a[a.length-1] + (Math.random()-0.5)*0.22));
+        return a.slice(1).concat([v]);
+      }) }));
+    }, 1400);
+  }
+
+  componentWillUnmount() { clearInterval(this._t); clearInterval(this._m); clearTimeout(this._s); this._ssh && this._ssh.forEach(clearTimeout); }
+
+  openSsh = () => {
+    const node = this.nodeById(this.state.selected);
+    if (!node) return;
+    this._ssh && this._ssh.forEach(clearTimeout);
+    this.setState({ ssh: { open:true, connecting:true, lines:[
+      { t:'$ cloudatlas ssh '+node.label+' --via ssm', c:'cmd' }
+    ] } });
+    const script = [
+      [500, { t:'Resolving instance i-0af22c9e13b7d4410 in us-east-1…', c:'dim' }],
+      [1000, { t:'Instance state: stopped. Start it to open a session?  [y/N] y', c:'dim' }],
+      [1700, { t:'StartInstances → pending → running (18s)', c:'ok' }],
+      [2300, { t:'Session-Manager plugin v1.2.707 · no inbound port required', c:'dim' }],
+      [2900, { t:'Starting session with SessionId: platform-eng-0c91ab4f', c:'ok' }],
+      [3400, { t:'', c:'dim' }],
+      [3500, { t:'[ec2-user@ip-10-0-2-66 ~]$ uptime', c:'cmd' }],
+      [3900, { t:' 09:41:22 up 0 min,  1 user,  load average: 0.14, 0.05, 0.01', c:'out' }],
+      [4200, { t:'[ec2-user@ip-10-0-2-66 ~]$ ', c:'cmd', caret:true }]
+    ];
+    this._ssh = script.map(s => setTimeout(() => this.setState(st => ({
+      ssh: { open:true, connecting: s[0] < 2900, lines: st.ssh.lines.concat([s[1]]) }
+    })), s[0]));
+  };
+
+  closeSsh = () => { this._ssh && this._ssh.forEach(clearTimeout); this.setState({ ssh:{ open:false, lines:[], connecting:false } }); };
+
+  set(patch) { this.setState(patch); }
+
+  nodeById(id) { return NODES.find(n => n.id === id); }
+
+  neighbors(id) {
+    const s = new Set([id]);
+    EDGES.forEach(e => { if (e.a === id) s.add(e.b); if (e.b === id) s.add(e.a); });
+    return s;
+  }
+
+  startScan = () => {
+    if (this.state.scanning) return;
+    this.setState({ scanning: true, progress: 0 });
+    this._t = setInterval(() => {
+      this.setState(s => {
+        const p = s.progress + 0.06;
+        if (p >= 1.25) { clearInterval(this._t); return { progress: 1.25 }; }
+        return { progress: p };
+      });
+    }, 90);
+    this._s = setTimeout(() => this.setState({ firstRun:false, scanning:false, view:'topology' }), 2600);
+  };
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const active = st.hover ? this.neighbors(st.hover) : null;
+    const secView = st.view === 'security';
+    const netView = st.view === 'network';
+    const pos = {};
+    NODES.forEach(n => { pos[n.id] = n; });
+    pos['internet'] = { x: 1180, y: 322 };
+
+    const visibleNodes = NODES.filter(n => st.services.includes(n.cat));
+    const shown = secView ? visibleNodes.concat([{ id:'internet', label:'0.0.0.0/0', sub:'internet', abbr:'WWW', cat:'security', type:'CIDR', x:1046, y:240, state:'—' }]) : visibleNodes;
+
+    const nodes = shown.map(n => {
+      const dim = active && !active.has(n.id);
+      const sel = st.selected === n.id && !st.firstRun;
+      const stopped = n.state === 'stopped';
+      const color = stopped ? '#6b7480' : CAT[n.cat];
+      const risky = secView && n.warnSg;
+      return {
+        id: n.id, label: n.label, abbr: n.abbr, warn: risky,
+        sub: netView ? (n.sub || '') : (n.sub || ''),
+        style: {
+          position:'absolute', left:(n.x - 52)+'px', top:(n.y - 30)+'px', width:'104px',
+          display:'flex', flexDirection:'column', alignItems:'center', cursor:'pointer',
+          opacity: dim ? 0.22 : 1, transition:'opacity .16s ease', zIndex: sel ? 6 : 4
+        },
+        tileStyle: {
+          width:'44px', height:'44px', borderRadius:'9px', background:color,
+          display:'flex', alignItems:'center', justifyContent:'center',
+          fontFamily:"'JetBrains Mono', monospace", fontSize:'11px', fontWeight:500, color:'#fff',
+          boxShadow: sel ? '0 0 0 2px var(--canvas), 0 0 0 4px '+color : (risky ? '0 0 0 2px var(--canvas), 0 0 0 4px #f2555a' : '0 1px 2px rgba(0,0,0,.35)'),
+          opacity: stopped ? 0.65 : 1
+        },
+        labelStyle: {
+          marginTop:'6px', fontSize:'11.5px', fontWeight: sel ? 650 : 500,
+          color: stopped ? 'var(--faint)' : 'var(--text)', textAlign:'center', lineHeight:1.25,
+          maxWidth:'104px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'
+        },
+        select: () => this.setState({ selected: n.id, tab: 'overview', copied:false }),
+        enter: () => this.setState({ hover: n.id }),
+        leave: () => this.setState({ hover: null })
+      };
+    });
+
+    const ids = new Set(shown.map(n => n.id));
+    const edgeSrc = EDGES.filter(e => ids.has(e.a) && ids.has(e.b));
+    const colorFor = e => e.kind === 'risk' ? '#f2555a'
+      : e.kind === 'event' ? '#E7157B'
+      : e.kind === 'sg' ? (secView ? '#8C4FFF' : '#6b7480')
+      : (dark ? '#7f8c9b' : '#9aa4b0');
+    const dashFor = e => e.kind === 'event' ? '2 5' : e.kind === 'sg' ? '6 5' : e.kind === 'risk' ? '6 4' : '0';
+
+    const edges = edgeSrc.map(e => {
+      const a = pos[e.a], b = pos[e.b];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.abs(dy) >= Math.abs(dx)
+        ? 'M'+a.x+','+a.y+' C'+a.x+','+(a.y+dy*0.5)+' '+b.x+','+(b.y-dy*0.5)+' '+b.x+','+b.y
+        : 'M'+a.x+','+a.y+' C'+(a.x+dx*0.5)+','+a.y+' '+(b.x-dx*0.5)+','+b.y+' '+b.x+','+b.y;
+      const dim = active && !(active.has(e.a) && active.has(e.b));
+      return {
+        d, color: colorFor(e), dash: dashFor(e),
+        width: e.kind === 'risk' ? 2 : (active && !dim ? 2 : 1.3),
+        opacity: dim ? 0.08 : (e.kind === 'risk' ? 0.95 : 0.6)
+      };
+    });
+
+    const edgeLabels = (secView && (this.props.showEdgeLabels !== false)) ? edgeSrc.map(e => {
+      const a = pos[e.a], b = pos[e.b];
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const w = Math.max(26, e.port.length * 6.4 + 10);
+      const dim = active && !(active.has(e.a) && active.has(e.b));
+      const risk = e.kind === 'risk';
+      return {
+        rx: mx - w/2, ry: my - 8, rw: w, tx: mx, ty: my + 3.5,
+        label: e.port, color: risk ? '#f2555a' : 'var(--border2)',
+        bg: risk ? 'rgba(242,85,90,.16)' : 'var(--panel)',
+        textColor: risk ? '#f2555a' : 'var(--muted)',
+        opacity: dim ? 0.1 : 1
+      };
+    }) : [];
+
+    const miniNodes = shown.map(n => ({
+      style: { position:'absolute', left:(n.x * 0.133)+'px', top:(n.y * 0.125)+'px', width:'4px', height:'4px', borderRadius:'1px', background: n.state === 'stopped' ? '#6b7480' : CAT[n.cat], opacity:.85 }
+    }));
+
+    const sel = this.nodeById(st.selected) || NODES[0];
+    const arn = 'arn:aws:'+sel.svc+':'+(sel.az === 'global' ? '' : 'us-east-1')+':'+ACCT+':'+sel.res;
+    const tagPairs = [
+      { k:'Environment', v:'prod' }, { k:'Service', v:'cortex-api' },
+      { k:'Owner', v:'platform-eng' }, { k:'Compliance', v:'hipaa' },
+      { k:'ManagedBy', v:'terraform' }
+    ];
+    const props = (PROPS[sel.id] || [
+      ['Type', sel.type], ['State', sel.state], ['Region','us-east-1'],
+      ['Availability zone', sel.az], ['Monthly est.','$'+sel.cost.toLocaleString()]
+    ]).map(p => ({ k: p[0], v: p[1] }));
+
+    const connOf = dir => EDGES.filter(e => (dir === 'in' ? e.b : e.a) === sel.id).map(e => {
+      const other = this.nodeById(dir === 'in' ? e.a : e.b) || { id:'internet', label:'0.0.0.0/0', abbr:'WWW', cat:'security' };
+      return {
+        label: other.label, abbr: other.abbr, detail: e.kind === 'event' ? e.port : 'tcp/'+e.port,
+        dotStyle: { width:'22px', height:'22px', borderRadius:'5px', background: CAT[other.cat], color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'JetBrains Mono', monospace", fontSize:'8.5px' },
+        select: () => this.setState({ selected: other.id, tab:'overview', copied:false })
+      };
+    });
+
+    const sg = SG[sel.id] || { name:'sg-default (sg-0a00ff12)', rules:[
+      { dir:'in', proto:'tcp', port:'443', source:'sg-alb' },
+      { dir:'out', proto:'all', port:'all', source:'0.0.0.0/0' }
+    ]};
+    const cell = risk => ({ padding:'6px 8px 6px 0', borderTop:'1px solid var(--border)', color: risk ? '#f2555a' : 'var(--text)' });
+
+    const json = JSON.stringify({
+      id: sel.id, arn, type: sel.type, state: sel.state,
+      placement: { region:'us-east-1', availabilityZone: sel.az, vpcId: sel.az === 'global' ? null : 'vpc-0a91c2', subnetId: sel.az === 'global' ? null : 'subnet-0f31b7' },
+      tags: { Environment:'prod', Service:'cortex-api', Owner:'platform-eng' },
+      costEstimateUsdMonth: sel.cost
+    }, null, 2);
+
+    const stateStyle = (s, big) => {
+      const ok = s === 'running' || s === 'available' || s === 'active' || s === 'deployed';
+      const c = s === 'stopped' ? 'var(--faint)' : ok ? 'var(--ok)' : 'var(--warn)';
+      return { display:'inline-flex', alignItems:'center', padding: big ? '2px 8px' : '2px 7px', borderRadius:'20px', border:'1px solid '+c, color:c, fontSize:'10.5px', fontWeight:550, textTransform:'capitalize' };
+    };
+
+    const rows = NODES.filter(n => st.services.includes(n.cat)).slice().sort((a,b) => {
+      const k = st.sort.key, dir = st.sort.dir === 'asc' ? 1 : -1;
+      const va = k === 'cost' ? a.cost : String(a[k] || a.label);
+      const vb = k === 'cost' ? b.cost : String(b[k] || b.label);
+      return va < vb ? -dir : va > vb ? dir : 0;
+    }).map(n => ({
+      name: n.label, type: n.type, region: n.az === 'global' ? 'global' : 'us-east-1',
+      vpc: n.az === 'global' ? '—' : 'prod-vpc', state: n.state, abbr: n.abbr,
+      tags: ['env=prod','svc=cortex-api'], cost: '$'+n.cost.toLocaleString(),
+      stateStyle: stateStyle(n.state),
+      dotStyle: { width:'22px', height:'22px', borderRadius:'5px', background: n.state === 'stopped' ? '#6b7480' : CAT[n.cat], color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'JetBrains Mono', monospace", fontSize:'8.5px' },
+      style: { cursor:'pointer', background: st.selected === n.id ? 'var(--raise)' : 'transparent' },
+      select: () => this.setState({ selected: n.id, tab:'overview' })
+    }));
+
+    const columns = [['name','Name'],['type','Type'],['region','Region'],['vpc','VPC'],['state','State'],['tags','Tags'],['cost','Monthly est.']].map(c => ({
+      label: c[1], arrow: st.sort.key === c[0] ? (st.sort.dir === 'asc' ? '▲' : '▼') : '',
+      style: { position:'sticky', top:0, zIndex:2, textAlign: c[0] === 'cost' ? 'right' : 'left', padding:'0 14px', height:'34px', background:'var(--panel2)', borderBottom:'1px solid var(--border)', fontSize:'11px', fontWeight:600, color:'var(--muted)', cursor:'pointer', whiteSpace:'nowrap' },
+      sort: () => this.setState(s => ({ sort: { key: c[0], dir: s.sort.key === c[0] && s.sort.dir === 'desc' ? 'asc' : 'desc' } }))
+    }));
+
+    const box = on => ({ width:'13px', height:'13px', borderRadius:'3.5px', border:'1px solid '+(on ? 'var(--text)' : 'var(--border2)'), background: on ? 'var(--text)' : 'transparent', color:'var(--bg)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'8.5px', lineHeight:1 });
+
+    const p = Math.min(1, st.progress);
+    const scanRegions = st.regions.map((r, i) => {
+      const local = Math.max(0, Math.min(1, st.progress - i * 0.22));
+      return {
+        id: r, status: local >= 1 ? 'done · '+(i === 0 ? 17 : 6)+' resources' : local <= 0 ? 'queued' : 'scanning '+Math.round(local*100)+'%',
+        barStyle: { width:(local*100)+'%', height:'100%', background: local >= 1 ? 'var(--ok)' : 'var(--text)', transition:'width .12s linear' }
+      };
+    });
+
+    return {
+      theme: st.theme,
+      themeGlyph: dark ? '☾' : '☀',
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+      accountName: this.props.accountName || 'prod',
+      accountId: this.props.accountId || '4821-7730-1192',
+      toggleAccount: () => {},
+      regionSummary: st.regions[0] + (st.regions.length > 1 ? ' +'+(st.regions.length-1) : ''),
+      regionsOpen: st.regionsOpen,
+      toggleRegions: () => this.setState(s => ({ regionsOpen: !s.regionsOpen })),
+      regionList: REGIONS.map(r => ({
+        id: r.id, count: r.count, check: st.regions.includes(r.id) ? '✓' : '',
+        boxStyle: box(st.regions.includes(r.id)),
+        toggle: () => this.setState(s => ({ regions: s.regions.includes(r.id) ? s.regions.filter(x => x !== r.id) : s.regions.concat([r.id]) }))
+      })),
+      syncLabel: st.syncing ? 'Syncing…' : 'Synced 4 min ago',
+      syncDotStyle: { width:'6px', height:'6px', borderRadius:'50%', background: st.syncing ? 'var(--warn)' : 'var(--ok)' },
+      spinStyle: { display:'inline-block', animation: st.syncing ? 'ca-spin 1s linear infinite' : 'none' },
+      refresh: () => { this.setState({ syncing: true }); setTimeout(() => this.setState({ syncing: false }), 1600); },
+      reconnect: () => this.setState({ firstRun: true, scanning: false, progress: 0 }),
+
+      sidebarOpen: st.sidebarOpen,
+      sidebarGlyph: st.sidebarOpen ? '‹' : '›',
+      toggleSidebar: () => this.setState(s => ({ sidebarOpen: !s.sidebarOpen })),
+      sidebarStyle: { width: st.sidebarOpen ? '236px' : '46px', flex:'0 0 '+(st.sidebarOpen ? '236px' : '46px'), borderRight:'1px solid var(--border)', background:'var(--panel)', display:'flex', flexDirection:'column', minHeight:0, transition:'width .15s ease' },
+      views: [['topology','Topology'],['network','Network'],['security','Security Groups'],['inventory','Inventory']].map(v => ({
+        label: v[1],
+        style: { display:'flex', alignItems:'center', gap:'9px', height:'30px', padding:'0 9px', borderRadius:'7px', cursor:'pointer', fontSize:'12.5px', fontWeight: st.view === v[0] ? 600 : 450, color: st.view === v[0] ? 'var(--text)' : 'var(--muted)', background: st.view === v[0] ? 'var(--raise)' : 'transparent' },
+        dotStyle: { width:'5px', height:'5px', borderRadius:'50%', background: st.view === v[0] ? '#ED7100' : 'var(--border2)', flex:'0 0 5px' },
+        select: () => this.setState({ view: v[0], firstRun: false })
+      })),
+      serviceFilters: SERVICES.map(s => ({
+        label: s.label, count: s.count, check: st.services.includes(s.key) ? '✓' : '',
+        boxStyle: box(st.services.includes(s.key)),
+        swatchStyle: { width:'8px', height:'8px', borderRadius:'2px', background: CAT[s.key] },
+        toggle: () => this.setState(x => ({ services: x.services.includes(s.key) ? x.services.filter(k => k !== s.key) : x.services.concat([s.key]) }))
+      })),
+      envChips: ['prod','staging','sandbox'].map(e => ({
+        label: e,
+        style: { padding:'3px 9px', borderRadius:'20px', border:'1px solid '+(st.envs.includes(e) ? 'var(--text)' : 'var(--border2)'), background: st.envs.includes(e) ? 'var(--text)' : 'transparent', color: st.envs.includes(e) ? 'var(--bg)' : 'var(--muted)', fontSize:'11.5px', cursor:'pointer', fontFamily:"'JetBrains Mono', monospace" },
+        toggle: () => this.setState(s => ({ envs: s.envs.includes(e) ? s.envs.filter(x => x !== e) : s.envs.concat([e]) }))
+      })),
+      toggleUnconnected: () => this.setState(s => ({ hideUnconnected: !s.hideUnconnected })),
+      hideUnconnectedTrack: { width:'26px', height:'15px', borderRadius:'20px', background: st.hideUnconnected ? 'var(--ok)' : 'var(--border2)', display:'flex', alignItems:'center', padding:'2px', transition:'background .15s' },
+      hideUnconnectedKnob: { width:'11px', height:'11px', borderRadius:'50%', background:'#fff', marginLeft: st.hideUnconnected ? '11px' : '0', transition:'margin .15s' },
+
+      showFirstRun: st.firstRun,
+      showCanvas: !st.firstRun && st.view !== 'inventory',
+      showInventory: !st.firstRun && st.view === 'inventory',
+      showPanel: !st.firstRun && !!st.selected,
+
+      focusCount: shown.length + ' resources · ' + edgeSrc.length + ' connections',
+      legend: [
+        { label:'Traffic', color: dark ? '#7f8c9b' : '#9aa4b0', dash:'0' },
+        { label:'Security group', color:'#8C4FFF', dash:'6 5' },
+        { label:'Event trigger', color:'#E7157B', dash:'2 5' }
+      ],
+      stageStyle: { position:'absolute', left:'50%', top:'26px', transform:'translateX(-50%) scale('+st.zoom+')', transformOrigin:'top center', width:'1240px', height:'764px' },
+      zoomLabel: Math.round(st.zoom * 100) + '%',
+      zoomIn: () => this.setState(s => ({ zoom: Math.min(1.6, s.zoom + 0.1) })),
+      zoomOut: () => this.setState(s => ({ zoom: Math.max(0.4, s.zoom - 0.1) })),
+      fit: () => this.setState({ zoom: st.selected ? 0.64 : 0.84 }),
+      riskBanner: secView,
+      nodes, edges, edgeLabels, miniNodes, rows, columns,
+      totalCost: '$' + NODES.reduce((s,n) => s + n.cost, 0).toLocaleString(),
+
+      tabs: [['overview','Overview'],['metrics','Metrics'],['connections','Connections'],['security','Security'],['tags','Tags'],['json','JSON']].map(t => ({
+        label: t[1],
+        style: { padding:'5px 6px', borderRadius:'6px', fontSize:'11.5px', cursor:'pointer', whiteSpace:'nowrap', flex:'0 0 auto', fontWeight: st.tab === t[0] ? 600 : 450, color: st.tab === t[0] ? 'var(--text)' : 'var(--muted)', background: st.tab === t[0] ? 'var(--raise)' : 'transparent' },
+        select: () => this.setState({ tab: t[0] })
+      })),
+      isMetrics: st.tab === 'metrics',
+      live: st.live,
+      liveDotStyle: { width:'6px', height:'6px', borderRadius:'50%', background: st.live ? 'var(--ok)' : 'var(--faint)' },
+      toggleLive: () => this.setState(s => ({ live: !s.live })),
+      sshOpen: st.ssh.open,
+      sshConnecting: st.ssh.connecting,
+      sshTitle: 'ssm-session · '+(sel.label)+' · 10.0.2.66',
+      liveLabel: st.live ? 'Pause' : 'Resume',
+      sshStatusStyle: { width:'7px', height:'7px', borderRadius:'50%', background: st.ssh.connecting ? 'var(--warn)' : 'var(--ok)' },
+      sshLines: st.ssh.lines.map((l, i) => ({
+        text: l.t, caret: !!l.caret,
+        style: { whiteSpace:'pre-wrap', color: l.c === 'cmd' ? 'var(--text)' : l.c === 'ok' ? 'var(--ok)' : l.c === 'dim' ? 'var(--faint)' : 'var(--muted)', lineHeight:1.7 }
+      })),
+      openSsh: this.openSsh,
+      closeSsh: this.closeSsh,
+      isOverview: st.tab === 'overview', isConnections: st.tab === 'connections',
+      isSecurity: st.tab === 'security', isTags: st.tab === 'tags', isJson: st.tab === 'json',
+      closePanel: () => this.setState({ selected: null }),
+      copyLabel: st.copied ? 'Copied' : 'Copy',
+      copyArn: () => { this.setState({ copied: true }); setTimeout(() => this.setState({ copied:false }), 1400); },
+      detail: {
+        label: sel.label, type: sel.type, az: sel.az === 'global' ? 'global' : 'us-east-1 · '+sel.az,
+        abbr: sel.abbr, arn, state: sel.state, stateStyle: stateStyle(sel.state, true),
+        tileStyle: { width:'36px', height:'36px', borderRadius:'8px', background: sel.state === 'stopped' ? '#6b7480' : CAT[sel.cat], color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'JetBrains Mono', monospace", fontSize:'10px', flex:'0 0 36px' },
+        props, tagPairs, json,
+        canSsh: !!sel.ssh,
+        metrics: (METRICS[sel.cat] || METRICS.compute).map((m, i) => {
+          const s = st.series[i];
+          const vals = s.map(v => m[2] + (v - 0.5) * 2 * m[3]);
+          const min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+          const span = (max - min) || 1;
+          const w = 306, h = 42;
+          const d = vals.map((v, j) => (j ? 'L' : 'M') + (j * (w / (vals.length - 1))).toFixed(1) + ',' + (h - ((v - min) / span) * (h - 6) - 3).toFixed(1)).join(' ');
+          const area = d + ' L' + w + ',' + h + ' L0,' + h + ' Z';
+          const last = vals[vals.length - 1];
+          const prev = vals[vals.length - 2];
+          const up = last >= prev;
+          const fmt = n => n >= 1000 ? Math.round(n).toLocaleString() : n >= 10 ? n.toFixed(1) : n.toFixed(2);
+          const color = m[0].indexOf('5XX') >= 0 || m[0].indexOf('Error') >= 0 || m[0].indexOf('Dropped') >= 0 || m[0].indexOf('Blocked') >= 0 ? '#E7157B' : CAT[sel.cat];
+          return {
+            name: m[0], unit: m[1], value: fmt(last) + (m[1] ? ' ' + m[1] : ''),
+            delta: (up ? '▲ ' : '▼ ') + fmt(Math.abs(last - prev)),
+            deltaStyle: { fontFamily:"'JetBrains Mono', monospace", fontSize:'10px', color: up ? 'var(--ok)' : 'var(--muted)' },
+            d, area, color,
+            fill: color + '22'
+          };
+        }),
+        inbound: connOf('in'), outbound: connOf('out'),
+        sgName: sg.name,
+        sgRules: sg.rules.map(r => ({
+          dir: r.dir === 'in' ? 'Inbound' : 'Outbound', proto: r.proto, port: r.port, source: r.source,
+          cell: cell(r.risk), cellLast: Object.assign(cell(r.risk), { padding:'6px 0' })
+        }))
+      },
+
+      profile: st.profile,
+      profilesOpen: st.profilesOpen,
+      toggleProfiles: () => this.setState(s => ({ profilesOpen: !s.profilesOpen })),
+      profiles: [
+        { name:'cortex-prod', account:'4821-7730-1192' },
+        { name:'cortex-staging', account:'9930-1188-0042' },
+        { name:'default', account:'1120-8841-7756' }
+      ].map(p => ({ name:p.name, account:p.account, select: () => this.setState({ profile:p.name, profilesOpen:false }) })),
+      scanning: st.scanning,
+      scanRegions,
+      scanLabel: st.scanning ? 'Scanning…' : 'Scan environment',
+      scanHint: st.scanning ? 'Read-only · '+Math.round(p*100)+'%' : st.regions.length+' regions selected',
+      startScan: this.startScan
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "_comment": [
+    "Copy to capture.deny.json (gitignored). Strings here must never appear in a",
+    "captured fixture. The check is a case-insensitive substring match over every",
+    "file, every nested value and every key.",
+    "",
+    "The account id (with and without dashes) and the profile name are added",
+    "automatically at runtime — you do not need to list them.",
+    "",
+    "Put your organisation's real names here: the things a pattern-based redactor",
+    "cannot recognise."
+  ],
+  "deny": [
+    "acme-corp",
+    "acmecorp",
+    "internal.example.gov",
+    "jdoe",
+    "10.42.",
+    "prod-secrets"
+  ],
+  "allow": []
+}

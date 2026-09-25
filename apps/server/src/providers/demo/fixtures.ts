@@ -1,0 +1,1309 @@
+import {
+  INTERNET_NODE_ID,
+  type GraphEdge,
+  type GraphNode,
+  type NodeCategory,
+  type NodeType,
+  type PropEntry,
+  type SecurityGroup,
+  type Tag,
+} from '@cloudatlas/shared'
+import { buildConsoleUrl } from '../../graph/console-url.js'
+
+export const DEMO_ACCOUNT_ID = '482177301192'
+export const DEMO_ACCOUNT_ALIAS = 'cortex-prod'
+
+export const DEMO_PROFILES = [
+  { name: 'cortex-prod', region: 'us-east-1', sso: true, source: 'config' as const },
+  { name: 'cortex-staging', region: 'us-east-1', sso: true, source: 'config' as const },
+  { name: 'default', region: 'us-west-2', sso: false, source: 'credentials' as const },
+]
+
+export const DEMO_REGIONS = ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-2']
+
+interface NodeSpec {
+  id: string
+  type: NodeType
+  category: NodeCategory
+  name: string
+  abbr: string
+  subtitle?: string
+  typeLabel: string
+  region: string
+  az?: string | null
+  vpcId?: string | null
+  subnetId?: string | null
+  parentId: string | null
+  state: string
+  /** Service namespace used to build the ARN, e.g. "rds". */
+  service?: string
+  /** Resource part of the ARN, e.g. "db:prod-pg-primary". */
+  resource?: string
+  /** Native id used for the console deep link. */
+  consoleId?: string
+  consoleExtra?: { cluster?: string; webAclScope?: 'global' | 'regional'; webAclId?: string }
+  tags?: Record<string, string>
+  props?: Array<[string, string] | [string, string, boolean]>
+  logGroups?: string[]
+  securityGroupIds?: string[]
+  monthlyCostUsd?: number
+  cidr?: string
+  isPublic?: boolean
+  raw?: Record<string, unknown>
+}
+
+const DEFAULT_TAGS: Record<string, string> = {
+  Environment: 'prod',
+  Service: 'cortex-api',
+  Owner: 'platform-eng',
+  Compliance: 'hipaa',
+  ManagedBy: 'terraform',
+}
+
+function toTags(tags: Record<string, string> | undefined): Tag[] {
+  return Object.entries(tags ?? DEFAULT_TAGS).map(([key, value]) => ({ key, value }))
+}
+
+function toProps(props: NodeSpec['props']): PropEntry[] {
+  return (props ?? []).map(([k, v, mono]) => ({ k, v, mono: mono ?? true }))
+}
+
+function buildArn(spec: NodeSpec): string | null {
+  if (!spec.service || !spec.resource) return null
+  const region = spec.region === 'global' ? '' : spec.region
+  const account = spec.service === 's3' ? '' : DEMO_ACCOUNT_ID
+  return `arn:aws:${spec.service}:${region}:${account}:${spec.resource}`
+}
+
+function mk(spec: NodeSpec): GraphNode {
+  const arn = buildArn(spec)
+  return {
+    id: spec.id,
+    arn,
+    type: spec.type,
+    category: spec.category,
+    name: spec.name,
+    abbr: spec.abbr,
+    subtitle: spec.subtitle,
+    typeLabel: spec.typeLabel,
+    region: spec.region,
+    az: spec.az ?? null,
+    vpcId: spec.vpcId ?? null,
+    subnetId: spec.subnetId ?? null,
+    parentId: spec.parentId,
+    state: spec.state,
+    tags: toTags(spec.tags),
+    props: toProps(spec.props),
+    raw: spec.raw ?? {
+      id: spec.id,
+      arn,
+      type: spec.typeLabel,
+      state: spec.state,
+      placement: {
+        region: spec.region,
+        availabilityZone: spec.az ?? null,
+        vpcId: spec.vpcId ?? null,
+        subnetId: spec.subnetId ?? null,
+      },
+      tags: spec.tags ?? DEFAULT_TAGS,
+      securityGroups: spec.securityGroupIds ?? [],
+    },
+    logGroups: spec.logGroups ?? [],
+    health: 'unknown',
+    securityGroupIds: spec.securityGroupIds ?? [],
+    monthlyCostUsd: spec.monthlyCostUsd ?? null,
+    cidr: spec.cidr,
+    isPublic: spec.isPublic,
+    consoleUrl: spec.consoleId
+      ? buildConsoleUrl(spec.type, spec.region, spec.consoleId, spec.consoleExtra ?? {})
+      : null,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Containers
+// ---------------------------------------------------------------------------
+
+function regionNode(region: string): GraphNode {
+  return mk({
+    id: `region:${region}`,
+    type: 'region',
+    category: 'network',
+    name: `Region · ${region}`,
+    abbr: 'R',
+    typeLabel: 'AWS Region',
+    region,
+    parentId: null,
+    state: 'active',
+    props: [['Region', region]],
+  })
+}
+
+function laneNode(id: string, region: string, name: string): GraphNode {
+  return mk({
+    id,
+    type: 'lane',
+    category: 'network',
+    name,
+    abbr: 'G',
+    typeLabel: 'Service lane',
+    region,
+    parentId: region === 'global' ? null : `region:${region}`,
+    state: 'active',
+  })
+}
+
+function vpcNode(spec: {
+  id: string
+  name: string
+  region: string
+  cidr: string
+}): GraphNode {
+  return mk({
+    id: spec.id,
+    type: 'vpc',
+    category: 'network',
+    name: spec.name,
+    abbr: 'V',
+    typeLabel: 'VPC',
+    region: spec.region,
+    vpcId: spec.id,
+    parentId: `region:${spec.region}`,
+    state: 'available',
+    service: 'ec2',
+    resource: `vpc/${spec.id}`,
+    consoleId: spec.id,
+    cidr: spec.cidr,
+    props: [
+      ['VPC ID', spec.id],
+      ['CIDR', spec.cidr],
+      ['Tenancy', 'default'],
+      ['DNS hostnames', 'enabled'],
+      ['Flow logs', `/aws/vpc/flowlogs/${spec.name}`],
+    ],
+    logGroups: [`/aws/vpc/flowlogs/${spec.name}`],
+  })
+}
+
+function azNode(region: string, az: string, vpcId: string): GraphNode {
+  return mk({
+    id: `az:${vpcId}:${az}`,
+    type: 'az',
+    category: 'network',
+    name: `AZ ${az}`,
+    abbr: 'AZ',
+    typeLabel: 'Availability Zone',
+    region,
+    az,
+    vpcId,
+    parentId: vpcId,
+    state: 'available',
+  })
+}
+
+function subnetNode(spec: {
+  id: string
+  name: string
+  region: string
+  az: string
+  vpcId: string
+  cidr: string
+  isPublic: boolean
+}): GraphNode {
+  return mk({
+    id: spec.id,
+    type: 'subnet',
+    category: 'network',
+    name: spec.name,
+    abbr: 'SN',
+    typeLabel: spec.isPublic ? 'Public subnet' : 'Private subnet',
+    region: spec.region,
+    az: spec.az,
+    vpcId: spec.vpcId,
+    subnetId: spec.id,
+    parentId: `az:${spec.vpcId}:${spec.az}`,
+    state: 'available',
+    service: 'ec2',
+    resource: `subnet/${spec.id}`,
+    consoleId: spec.id,
+    cidr: spec.cidr,
+    isPublic: spec.isPublic,
+    props: [
+      ['Subnet ID', spec.id],
+      ['CIDR', spec.cidr],
+      ['Availability zone', spec.az],
+      [
+        'Route to internet',
+        spec.isPublic ? '0.0.0.0/0 → igw-04b1 (public)' : '0.0.0.0/0 → nat (private)',
+      ],
+      ['Auto-assign public IP', spec.isPublic ? 'enabled' : 'disabled'],
+    ],
+  })
+}
+
+// ---------------------------------------------------------------------------
+// us-east-1
+// ---------------------------------------------------------------------------
+
+const USE1 = 'us-east-1'
+const PROD_VPC = 'vpc-0a91c2'
+const SUBNET_PUB_A = 'subnet-0a12'
+const SUBNET_PUB_B = 'subnet-0b34'
+const SUBNET_PRIV_A = 'subnet-0c11'
+const SUBNET_PRIV_B = 'subnet-0c12'
+
+const useast1Containers: GraphNode[] = [
+  regionNode(USE1),
+  laneNode(`lane:${USE1}`, USE1, 'Regional services'),
+  vpcNode({ id: PROD_VPC, name: 'prod-vpc', region: USE1, cidr: '10.0.0.0/16' }),
+  azNode(USE1, 'us-east-1a', PROD_VPC),
+  azNode(USE1, 'us-east-1b', PROD_VPC),
+  subnetNode({ id: SUBNET_PUB_A, name: 'prod-public-1a', region: USE1, az: 'us-east-1a', vpcId: PROD_VPC, cidr: '10.0.1.0/24', isPublic: true }),
+  subnetNode({ id: SUBNET_PRIV_A, name: 'prod-private-1a', region: USE1, az: 'us-east-1a', vpcId: PROD_VPC, cidr: '10.0.11.0/24', isPublic: false }),
+  subnetNode({ id: SUBNET_PUB_B, name: 'prod-public-1b', region: USE1, az: 'us-east-1b', vpcId: PROD_VPC, cidr: '10.0.2.0/24', isPublic: true }),
+  subnetNode({ id: SUBNET_PRIV_B, name: 'prod-private-1b', region: USE1, az: 'us-east-1b', vpcId: PROD_VPC, cidr: '10.0.12.0/24', isPublic: false }),
+]
+
+const globalLane: GraphNode[] = [
+  laneNode('lane:global', 'global', 'Edge & global services'),
+  mk({
+    id: 'route53',
+    type: 'route53-zone',
+    category: 'network',
+    name: 'cortex.health.gov.gy',
+    abbr: 'R53',
+    subtitle: 'Route 53',
+    typeLabel: 'Route 53 hosted zone',
+    region: 'global',
+    parentId: 'lane:global',
+    state: 'active',
+    service: 'route53',
+    resource: 'hostedzone/Z3PQ21AEXAMPLE',
+    consoleId: 'Z3PQ21AEXAMPLE',
+    monthlyCostUsd: 0.5,
+    props: [
+      ['Hosted zone ID', 'Z3PQ21AEXAMPLE'],
+      ['Type', 'Public'],
+      ['Records', '24'],
+      ['Alias target', 'd2f9k1x.cloudfront.net'],
+      ['Query logging', 'disabled'],
+    ],
+  }),
+  mk({
+    id: 'waf',
+    type: 'waf-web-acl',
+    category: 'security',
+    name: 'cortex-waf',
+    abbr: 'WAF',
+    subtitle: 'WAF web ACL',
+    typeLabel: 'WAF v2 web ACL',
+    region: 'global',
+    parentId: 'lane:global',
+    state: 'active',
+    service: 'wafv2',
+    resource: 'global/webacl/cortex-waf/8f21a3c4',
+    consoleId: 'cortex-waf',
+    consoleExtra: { webAclScope: 'global', webAclId: '8f21a3c4' },
+    monthlyCostUsd: 47,
+    logGroups: ['aws-waf-logs-cortex'],
+    props: [
+      ['Scope', 'CLOUDFRONT'],
+      ['Web ACL ID', '8f21a3c4'],
+      ['Associated', 'd2f9k1x.cloudfront.net, api-alb'],
+      ['Rules', '3 managed, 2 custom'],
+      ['Default action', 'Allow'],
+      ['Rate limit', '2000 req / 5 min per IP'],
+      ['Logging', 'cloudwatch:aws-waf-logs-cortex'],
+    ],
+  }),
+  mk({
+    id: 'cloudfront',
+    type: 'cloudfront',
+    category: 'network',
+    name: 'd2f9k1x.cloudfront.net',
+    abbr: 'CF',
+    subtitle: 'CloudFront',
+    typeLabel: 'CloudFront distribution',
+    region: 'global',
+    parentId: 'lane:global',
+    state: 'deployed',
+    service: 'cloudfront',
+    resource: 'distribution/E1H7QK2LM9ZT',
+    consoleId: 'E1H7QK2LM9ZT',
+    monthlyCostUsd: 214,
+    props: [
+      ['Distribution ID', 'E1H7QK2LM9ZT'],
+      ['Domain', 'd2f9k1x.cloudfront.net'],
+      ['Aliases', 'cortex.health.gov.gy'],
+      ['Origins', 'prod-assets.s3, api-alb'],
+      ['Price class', 'PriceClass_100'],
+      ['WAF', 'cortex-waf'],
+      ['TLS', 'TLSv1.2_2021 · ACM'],
+    ],
+  }),
+  mk({
+    id: 'iam',
+    type: 'iam-role',
+    category: 'security',
+    name: 'cortex-roles',
+    abbr: 'IAM',
+    subtitle: 'IAM',
+    typeLabel: 'IAM role set',
+    region: 'global',
+    parentId: 'lane:global',
+    state: 'active',
+    service: 'iam',
+    resource: 'role/cortex-api-task',
+    consoleId: 'cortex-api-task',
+    monthlyCostUsd: 0,
+    props: [
+      ['Roles', 'cortex-api-task, ecsTaskExecutionRole, cortex-image-resize'],
+      ['Trusted service', 'ecs-tasks.amazonaws.com'],
+      ['Permission boundary', 'none'],
+      ['Last used', '2026-09-20 09:12 UTC'],
+    ],
+  }),
+]
+
+const useast1Regional: GraphNode[] = [
+  mk({
+    id: 's3-assets',
+    type: 's3',
+    category: 'storage',
+    name: 'prod-assets',
+    abbr: 'S3',
+    subtitle: 'S3 bucket',
+    typeLabel: 'S3 bucket',
+    region: USE1,
+    parentId: `lane:${USE1}`,
+    state: 'active',
+    service: 's3',
+    resource: 'prod-assets',
+    consoleId: 'prod-assets',
+    monthlyCostUsd: 38,
+    props: [
+      ['Bucket', 'prod-assets'],
+      ['Size', '412 GiB · 1.2M objects'],
+      ['Versioning', 'enabled'],
+      ['Encryption', 'SSE-KMS · aws/s3'],
+      ['Public access', 'blocked (all four settings)'],
+      ['Origin for', 'd2f9k1x.cloudfront.net'],
+    ],
+  }),
+  mk({
+    id: 's3-uploads',
+    type: 's3',
+    category: 'storage',
+    name: 'prod-uploads',
+    abbr: 'S3',
+    subtitle: 'S3 bucket',
+    typeLabel: 'S3 bucket',
+    region: USE1,
+    parentId: `lane:${USE1}`,
+    state: 'active',
+    service: 's3',
+    resource: 'prod-uploads',
+    consoleId: 'prod-uploads',
+    monthlyCostUsd: 61,
+    props: [
+      ['Bucket', 'prod-uploads'],
+      ['Size', '88 GiB · 340k objects'],
+      ['Versioning', 'disabled'],
+      ['Encryption', 'SSE-S3 (AES256)'],
+      ['Public access', 'blocked (all four settings)'],
+      ['Notification', 's3:ObjectCreated:* → image-resize'],
+    ],
+  }),
+  mk({
+    id: 'lambda',
+    type: 'lambda',
+    category: 'compute',
+    name: 'image-resize',
+    abbr: 'λ',
+    subtitle: 'Lambda',
+    typeLabel: 'Lambda function',
+    region: USE1,
+    parentId: `lane:${USE1}`,
+    state: 'active',
+    service: 'lambda',
+    resource: 'function:image-resize',
+    consoleId: 'image-resize',
+    monthlyCostUsd: 27,
+    logGroups: ['/aws/lambda/image-resize'],
+    props: [
+      ['Runtime', 'python3.12 · arm64'],
+      ['Memory', '1024 MB · timeout 30s'],
+      ['Trigger', 's3:ObjectCreated:* on prod-uploads'],
+      ['Destination', 'resize-jobs (SQS) on success'],
+      ['Concurrency', 'reserved 50'],
+      ['VPC', 'none (public egress)'],
+      ['Role', 'cortex-image-resize'],
+      ['Last deploy', '2026-09-12 · $LATEST'],
+    ],
+  }),
+  mk({
+    id: 'sqs',
+    type: 'sqs',
+    category: 'integration',
+    name: 'resize-jobs',
+    abbr: 'SQS',
+    subtitle: 'SQS queue',
+    typeLabel: 'SQS queue',
+    region: USE1,
+    parentId: `lane:${USE1}`,
+    state: 'active',
+    service: 'sqs',
+    resource: 'resize-jobs',
+    consoleId: `https://sqs.us-east-1.amazonaws.com/${DEMO_ACCOUNT_ID}/resize-jobs`,
+    monthlyCostUsd: 4,
+    props: [
+      ['Queue', 'resize-jobs'],
+      ['Type', 'Standard'],
+      ['Visibility timeout', '60s'],
+      ['Retention', '4 days'],
+      ['DLQ', 'resize-jobs-dlq after 5 receives'],
+      ['Encryption', 'SSE-SQS'],
+    ],
+  }),
+]
+
+const useast1Vpc: GraphNode[] = [
+  mk({
+    id: 'alb',
+    type: 'alb',
+    category: 'network',
+    name: 'api-alb',
+    abbr: 'ALB',
+    subtitle: 'ALB · 10.0.1.24',
+    typeLabel: 'Application Load Balancer',
+    region: USE1,
+    az: 'us-east-1a',
+    vpcId: PROD_VPC,
+    subnetId: SUBNET_PUB_A,
+    parentId: SUBNET_PUB_A,
+    state: 'active',
+    service: 'elasticloadbalancing',
+    resource: 'loadbalancer/app/api-alb/9d2c4f1a8b',
+    consoleId: 'api-alb',
+    securityGroupIds: ['sg-0d17f3aa'],
+    monthlyCostUsd: 26,
+    props: [
+      ['DNS name', 'api-alb-1932741.us-east-1.elb.amazonaws.com'],
+      ['Scheme', 'internet-facing'],
+      ['Listeners', '443 (TLS 1.3) → tg-api, 80 → redirect'],
+      ['Target group', 'tg-api · 3/3 healthy'],
+      ['Subnets', 'subnet-0a12 (10.0.1.0/24), subnet-0b34 (10.0.2.0/24)'],
+      ['Node IPs', '10.0.1.24, 10.0.2.31'],
+      ['Security groups', 'sg-alb-public'],
+      ['WAF', 'cortex-waf attached'],
+      ['Idle timeout', '60s'],
+      ['Access logs', 's3://prod-logs/alb/'],
+    ],
+  }),
+  mk({
+    id: 'nat-a',
+    type: 'nat-gateway',
+    category: 'network',
+    name: 'nat-1a',
+    abbr: 'NAT',
+    subtitle: 'NAT GW · 10.0.1.9',
+    typeLabel: 'NAT Gateway',
+    region: USE1,
+    az: 'us-east-1a',
+    vpcId: PROD_VPC,
+    subnetId: SUBNET_PUB_A,
+    parentId: SUBNET_PUB_A,
+    state: 'available',
+    service: 'ec2',
+    resource: 'natgateway/nat-04c1a8e2',
+    consoleId: 'nat-04c1a8e2',
+    monthlyCostUsd: 33,
+    props: [
+      ['NAT Gateway ID', 'nat-04c1a8e2'],
+      ['Connectivity', 'public'],
+      ['Elastic IP', '52.14.88.201'],
+      ['Private IP', '10.0.1.9'],
+      ['Subnet', 'subnet-0a12'],
+    ],
+  }),
+  mk({
+    id: 'fw-a',
+    type: 'network-firewall',
+    category: 'security',
+    name: 'netfw-1a',
+    abbr: 'FW',
+    subtitle: 'Firewall endpoint',
+    typeLabel: 'Network Firewall endpoint',
+    region: USE1,
+    az: 'us-east-1a',
+    vpcId: PROD_VPC,
+    subnetId: SUBNET_PUB_A,
+    parentId: SUBNET_PUB_A,
+    state: 'ready',
+    service: 'network-firewall',
+    resource: 'firewall/prod-netfw',
+    consoleId: 'prod-netfw',
+    monthlyCostUsd: 196,
+    logGroups: ['/aws/network-firewall/prod'],
+    props: [
+      ['Firewall', 'prod-netfw'],
+      ['Endpoint', 'vpce-0c81aa3f · subnet-0a12'],
+      ['Policy', 'prod-netfw-policy'],
+      ['Stateful groups', 'threat-intel, tls-sni-allowlist'],
+      ['Stateless groups', 'drop-invalid'],
+      ['Home net', '10.0.0.0/16'],
+      ['Logging', 'cloudwatch:/aws/network-firewall/prod'],
+    ],
+  }),
+  mk({
+    id: 'nat-b',
+    type: 'nat-gateway',
+    category: 'network',
+    name: 'nat-1b',
+    abbr: 'NAT',
+    subtitle: 'NAT GW · 10.0.2.9',
+    typeLabel: 'NAT Gateway',
+    region: USE1,
+    az: 'us-east-1b',
+    vpcId: PROD_VPC,
+    subnetId: SUBNET_PUB_B,
+    parentId: SUBNET_PUB_B,
+    state: 'available',
+    service: 'ec2',
+    resource: 'natgateway/nat-07f3b1d9',
+    consoleId: 'nat-07f3b1d9',
+    monthlyCostUsd: 33,
+    props: [
+      ['NAT Gateway ID', 'nat-07f3b1d9'],
+      ['Connectivity', 'public'],
+      ['Elastic IP', '52.14.90.77'],
+      ['Private IP', '10.0.2.9'],
+      ['Subnet', 'subnet-0b34'],
+    ],
+  }),
+  mk({
+    id: 'fw-b',
+    type: 'network-firewall',
+    category: 'security',
+    name: 'netfw-1b',
+    abbr: 'FW',
+    subtitle: 'Firewall endpoint',
+    typeLabel: 'Network Firewall endpoint',
+    region: USE1,
+    az: 'us-east-1b',
+    vpcId: PROD_VPC,
+    subnetId: SUBNET_PUB_B,
+    parentId: SUBNET_PUB_B,
+    state: 'ready',
+    service: 'network-firewall',
+    resource: 'firewall/prod-netfw',
+    consoleId: 'prod-netfw',
+    monthlyCostUsd: 196,
+    logGroups: ['/aws/network-firewall/prod'],
+    props: [
+      ['Firewall', 'prod-netfw'],
+      ['Endpoint', 'vpce-0d92bb41 · subnet-0b34'],
+      ['Policy', 'prod-netfw-policy'],
+      ['Stateful groups', 'threat-intel, tls-sni-allowlist'],
+      ['Home net', '10.0.0.0/16'],
+    ],
+  }),
+  mk({
+    id: 'ec2-legacy',
+    type: 'ec2',
+    category: 'compute',
+    name: 'legacy-worker',
+    abbr: 'EC2',
+    subtitle: 't3.large · stopped',
+    typeLabel: 'EC2 instance',
+    region: USE1,
+    az: 'us-east-1b',
+    vpcId: PROD_VPC,
+    subnetId: SUBNET_PUB_B,
+    parentId: SUBNET_PUB_B,
+    state: 'stopped',
+    service: 'ec2',
+    resource: 'instance/i-0af22c9e13b7d4410',
+    consoleId: 'i-0af22c9e13b7d4410',
+    securityGroupIds: ['sg-0e91aa30'],
+    monthlyCostUsd: 0,
+    tags: { Environment: 'prod', Service: 'legacy-batch', Owner: 'platform-eng', ManagedBy: 'manual' },
+    props: [
+      ['Instance ID', 'i-0af22c9e13b7d4410'],
+      ['Instance type', 't3.large · 2 vCPU / 8 GiB'],
+      ['State', 'stopped since 2026-08-30 14:02 UTC'],
+      ['Private IPv4', '10.0.2.66'],
+      ['Public IPv4', '— (released)'],
+      ['ENI', 'eni-0b7712ff · subnet-0b34 (10.0.2.0/24)'],
+      ['Security groups', 'sg-legacy-worker'],
+      ['IAM role', 'cortex-legacy-worker'],
+      ['AMI', 'ami-0c94b1d2 (AL2023 kernel 6.1)'],
+      ['Key pair', 'ops-legacy'],
+      ['EBS', 'root 80 GiB gp3 · vol-0aa31c7e'],
+      ['IMDS', 'v1 and v2 allowed'],
+      ['CloudWatch agent', 'not installed'],
+      ['Route table', 'rtb-0918cc · 0.0.0.0/0 → igw-04b1'],
+    ],
+  }),
+  mk({
+    id: 'ec2-batch',
+    type: 'ec2',
+    category: 'compute',
+    name: 'batch-runner',
+    abbr: 'EC2',
+    subtitle: 'm6i.xlarge · 10.0.12.20',
+    typeLabel: 'EC2 instance',
+    region: USE1,
+    az: 'us-east-1b',
+    vpcId: PROD_VPC,
+    subnetId: SUBNET_PRIV_B,
+    parentId: SUBNET_PRIV_B,
+    state: 'running',
+    service: 'ec2',
+    resource: 'instance/i-07d31be8a0c94f2e1',
+    consoleId: 'i-07d31be8a0c94f2e1',
+    securityGroupIds: ['sg-0c33d901'],
+    monthlyCostUsd: 142,
+    tags: { Environment: 'prod', Service: 'cortex-batch', Owner: 'data-eng', ManagedBy: 'terraform' },
+    props: [
+      ['Instance ID', 'i-07d31be8a0c94f2e1'],
+      ['Instance type', 'm6i.xlarge · 4 vCPU / 16 GiB'],
+      ['State', 'running since 2026-09-14 02:11 UTC'],
+      ['Private IPv4', '10.0.12.20'],
+      ['ENI', 'eni-0f4429ab · subnet-0c12 (10.0.12.0/24)'],
+      ['Security groups', 'sg-batch-runner'],
+      ['IAM role', 'cortex-batch-runner'],
+      ['AMI', 'ami-0c94b1d2 (AL2023 kernel 6.1)'],
+      ['EBS', 'root 120 GiB gp3 · vol-0f8821ce'],
+      ['IMDS', 'v2 required'],
+      ['CloudWatch agent', 'installed · CWAgent namespace'],
+    ],
+  }),
+  mk({
+    id: 'ecs-1',
+    type: 'ecs-task',
+    category: 'compute',
+    name: 'api-service/1',
+    abbr: 'ECS',
+    subtitle: '10.0.11.41',
+    typeLabel: 'ECS Fargate task',
+    region: USE1,
+    az: 'us-east-1a',
+    vpcId: PROD_VPC,
+    subnetId: SUBNET_PRIV_A,
+    parentId: SUBNET_PRIV_A,
+    state: 'running',
+    service: 'ecs',
+    resource: 'task/prod/1c93f0a8e2',
+    consoleId: '1c93f0a8e2',
+    consoleExtra: { cluster: 'prod' },
+    securityGroupIds: ['sg-02cc91b4'],
+    monthlyCostUsd: 88,
+    logGroups: ['/ecs/cortex-api'],
+    props: [
+      ['Task ARN suffix', '1c93f0a8e2'],
+      ['Task definition', 'cortex-api:184'],
+      ['Launch type', 'Fargate · 1 vCPU / 2 GB'],
+      ['Image', `${DEMO_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/cortex-api:2026.09.3`],
+      ['Private IPv4', '10.0.11.41'],
+      ['ENI', 'eni-0c41aa93'],
+      ['Security groups', 'sg-api-tasks'],
+      ['Task role', 'cortex-api-task'],
+      ['Log configuration', 'awslogs → /ecs/cortex-api'],
+      ['Started', '2026-09-18 08:41 UTC'],
+      ['Health', 'HEALTHY · /healthz 200'],
+    ],
+  }),
+  mk({
+    id: 'ecs-2',
+    type: 'ecs-task',
+    category: 'compute',
+    name: 'api-service/2',
+    abbr: 'ECS',
+    subtitle: '10.0.11.58',
+    typeLabel: 'ECS Fargate task',
+    region: USE1,
+    az: 'us-east-1a',
+    vpcId: PROD_VPC,
+    subnetId: SUBNET_PRIV_A,
+    parentId: SUBNET_PRIV_A,
+    state: 'running',
+    service: 'ecs',
+    resource: 'task/prod/4a71bc90d3',
+    consoleId: '4a71bc90d3',
+    consoleExtra: { cluster: 'prod' },
+    securityGroupIds: ['sg-02cc91b4'],
+    monthlyCostUsd: 88,
+    logGroups: ['/ecs/cortex-api'],
+    props: [
+      ['Task ARN suffix', '4a71bc90d3'],
+      ['Task definition', 'cortex-api:184'],
+      ['Launch type', 'Fargate · 1 vCPU / 2 GB'],
+      ['Private IPv4', '10.0.11.58'],
+      ['ENI', 'eni-0d5533ab'],
+      ['Security groups', 'sg-api-tasks'],
+      ['Log configuration', 'awslogs → /ecs/cortex-api'],
+      ['Started', '2026-09-18 08:41 UTC'],
+      ['Health', 'HEALTHY · /healthz 200'],
+    ],
+  }),
+  mk({
+    id: 'redis',
+    type: 'elasticache',
+    category: 'database',
+    name: 'cortex-cache',
+    abbr: 'EC$',
+    subtitle: 'cache.r6g.large',
+    typeLabel: 'ElastiCache Redis node',
+    region: USE1,
+    az: 'us-east-1a',
+    vpcId: PROD_VPC,
+    subnetId: SUBNET_PRIV_A,
+    parentId: SUBNET_PRIV_A,
+    state: 'available',
+    service: 'elasticache',
+    resource: 'cluster:cortex-cache-001',
+    consoleId: 'cortex-cache',
+    securityGroupIds: ['sg-0771be05'],
+    monthlyCostUsd: 112,
+    props: [
+      ['Engine', 'Redis 7.1 · cluster mode off'],
+      ['Node type', 'cache.r6g.large'],
+      ['Primary endpoint', 'cortex-cache.9xk2.0001.use1.cache.amazonaws.com:6379'],
+      ['Private IPv4', '10.0.11.120'],
+      ['Replicas', '1 (us-east-1b)'],
+      ['Security groups', 'sg-cortex-cache'],
+      ['Encryption', 'in-transit + at-rest'],
+      ['Maintenance', 'sun 05:00–06:00 UTC'],
+    ],
+  }),
+  mk({
+    id: 'ecs-3',
+    type: 'ecs-task',
+    category: 'compute',
+    name: 'api-service/3',
+    abbr: 'ECS',
+    subtitle: '10.0.12.33',
+    typeLabel: 'ECS Fargate task',
+    region: USE1,
+    az: 'us-east-1b',
+    vpcId: PROD_VPC,
+    subnetId: SUBNET_PRIV_B,
+    parentId: SUBNET_PRIV_B,
+    state: 'running',
+    service: 'ecs',
+    resource: 'task/prod/8b20ef4417',
+    consoleId: '8b20ef4417',
+    consoleExtra: { cluster: 'prod' },
+    securityGroupIds: ['sg-02cc91b4'],
+    monthlyCostUsd: 88,
+    logGroups: ['/ecs/cortex-api'],
+    props: [
+      ['Task ARN suffix', '8b20ef4417'],
+      ['Task definition', 'cortex-api:184'],
+      ['Launch type', 'Fargate · 1 vCPU / 2 GB'],
+      ['Private IPv4', '10.0.12.33'],
+      ['ENI', 'eni-0e7741cd'],
+      ['Security groups', 'sg-api-tasks'],
+      ['Log configuration', 'awslogs → /ecs/cortex-api'],
+      ['Started', '2026-09-18 08:42 UTC'],
+      ['Health', 'HEALTHY · /healthz 200'],
+    ],
+  }),
+  mk({
+    id: 'rds-primary',
+    type: 'rds',
+    category: 'database',
+    name: 'prod-pg-primary',
+    abbr: 'RDS',
+    subtitle: 'db.r6g.2xlarge',
+    typeLabel: 'RDS PostgreSQL instance',
+    region: USE1,
+    az: 'us-east-1a',
+    vpcId: PROD_VPC,
+    subnetId: SUBNET_PRIV_A,
+    parentId: SUBNET_PRIV_A,
+    state: 'available',
+    service: 'rds',
+    resource: 'db:prod-pg-primary',
+    consoleId: 'prod-pg-primary',
+    securityGroupIds: ['sg-0b41c7e2'],
+    monthlyCostUsd: 642,
+    logGroups: ['/aws/rds/instance/prod-pg-primary/postgresql'],
+    props: [
+      ['Engine', 'PostgreSQL 15.4'],
+      ['Instance class', 'db.r6g.2xlarge · 8 vCPU / 64 GiB'],
+      ['Storage', '1024 GiB gp3 · 12000 IOPS'],
+      ['Multi-AZ', 'Enabled (us-east-1b)'],
+      ['Endpoint', 'prod-pg-primary.c9xk2.us-east-1.rds.amazonaws.com'],
+      ['Port', '5432'],
+      ['Private IP', '10.0.11.90'],
+      ['max_connections', '1600 (parameter group prod-pg15)'],
+      ['Performance Insights', 'enabled · 7 day retention'],
+      ['Log exports', 'postgresql'],
+      ['Backup window', '03:10–03:40 UTC · 35 days'],
+      ['Encryption', 'KMS · aws/rds'],
+      ['Publicly accessible', 'no'],
+      ['Created', '2024-02-11'],
+    ],
+  }),
+  mk({
+    id: 'rds-standby',
+    type: 'rds',
+    category: 'database',
+    name: 'prod-pg-standby',
+    abbr: 'RDS',
+    subtitle: 'read replica',
+    typeLabel: 'RDS PostgreSQL replica',
+    region: USE1,
+    az: 'us-east-1b',
+    vpcId: PROD_VPC,
+    subnetId: SUBNET_PRIV_B,
+    parentId: SUBNET_PRIV_B,
+    state: 'available',
+    service: 'rds',
+    resource: 'db:prod-pg-standby',
+    consoleId: 'prod-pg-standby',
+    securityGroupIds: ['sg-0b41c7e2'],
+    monthlyCostUsd: 642,
+    logGroups: ['/aws/rds/instance/prod-pg-standby/postgresql'],
+    props: [
+      ['Engine', 'PostgreSQL 15.4'],
+      ['Instance class', 'db.r6g.2xlarge · 8 vCPU / 64 GiB'],
+      ['Role', 'Read replica of prod-pg-primary'],
+      ['Endpoint', 'prod-pg-standby.c9xk2.us-east-1.rds.amazonaws.com'],
+      ['Private IP', '10.0.12.90'],
+      ['Performance Insights', 'enabled · 7 day retention'],
+      ['Encryption', 'KMS · aws/rds'],
+      ['Publicly accessible', 'no'],
+    ],
+  }),
+]
+
+// ---------------------------------------------------------------------------
+// us-west-2 (disaster recovery)
+// ---------------------------------------------------------------------------
+
+const USW2 = 'us-west-2'
+const DR_VPC = 'vpc-0dd41f'
+const DR_PUB = 'subnet-0w1a'
+const DR_PRIV = 'subnet-0w1b'
+
+const uswest2: GraphNode[] = [
+  regionNode(USW2),
+  laneNode(`lane:${USW2}`, USW2, 'Regional services'),
+  vpcNode({ id: DR_VPC, name: 'dr-vpc', region: USW2, cidr: '10.1.0.0/16' }),
+  azNode(USW2, 'us-west-2a', DR_VPC),
+  subnetNode({ id: DR_PUB, name: 'dr-public-2a', region: USW2, az: 'us-west-2a', vpcId: DR_VPC, cidr: '10.1.1.0/24', isPublic: true }),
+  subnetNode({ id: DR_PRIV, name: 'dr-private-2a', region: USW2, az: 'us-west-2a', vpcId: DR_VPC, cidr: '10.1.11.0/24', isPublic: false }),
+  mk({
+    id: 'dr-alb',
+    type: 'alb',
+    category: 'network',
+    name: 'dr-alb',
+    abbr: 'ALB',
+    subtitle: 'ALB · 10.1.1.18',
+    typeLabel: 'Application Load Balancer',
+    region: USW2,
+    az: 'us-west-2a',
+    vpcId: DR_VPC,
+    subnetId: DR_PUB,
+    parentId: DR_PUB,
+    state: 'active',
+    service: 'elasticloadbalancing',
+    resource: 'loadbalancer/app/dr-alb/2a71c0',
+    consoleId: 'dr-alb',
+    securityGroupIds: ['sg-0dr1alb'],
+    monthlyCostUsd: 26,
+    tags: { Environment: 'prod', Service: 'cortex-api', Owner: 'platform-eng', Role: 'dr' },
+    props: [
+      ['DNS name', 'dr-alb-882104.us-west-2.elb.amazonaws.com'],
+      ['Scheme', 'internet-facing'],
+      ['Target group', 'tg-dr-api · 2/2 healthy'],
+      ['Listeners', '443 (TLS 1.3) → tg-dr-api'],
+    ],
+  }),
+  mk({
+    id: 'dr-ecs-1',
+    type: 'ecs-task',
+    category: 'compute',
+    name: 'api-service-dr/1',
+    abbr: 'ECS',
+    subtitle: '10.1.11.22',
+    typeLabel: 'ECS Fargate task',
+    region: USW2,
+    az: 'us-west-2a',
+    vpcId: DR_VPC,
+    subnetId: DR_PRIV,
+    parentId: DR_PRIV,
+    state: 'running',
+    service: 'ecs',
+    resource: 'task/dr/7c11aa',
+    consoleId: '7c11aa',
+    consoleExtra: { cluster: 'dr' },
+    securityGroupIds: ['sg-0dr2task'],
+    monthlyCostUsd: 88,
+    logGroups: ['/ecs/cortex-api-dr'],
+    tags: { Environment: 'prod', Service: 'cortex-api', Owner: 'platform-eng', Role: 'dr' },
+    props: [
+      ['Task definition', 'cortex-api:184'],
+      ['Launch type', 'Fargate · 1 vCPU / 2 GB'],
+      ['Private IPv4', '10.1.11.22'],
+    ],
+  }),
+  mk({
+    id: 'dr-ecs-2',
+    type: 'ecs-task',
+    category: 'compute',
+    name: 'api-service-dr/2',
+    abbr: 'ECS',
+    subtitle: '10.1.11.37',
+    typeLabel: 'ECS Fargate task',
+    region: USW2,
+    az: 'us-west-2a',
+    vpcId: DR_VPC,
+    subnetId: DR_PRIV,
+    parentId: DR_PRIV,
+    state: 'running',
+    service: 'ecs',
+    resource: 'task/dr/9f30bb',
+    consoleId: '9f30bb',
+    consoleExtra: { cluster: 'dr' },
+    securityGroupIds: ['sg-0dr2task'],
+    monthlyCostUsd: 88,
+    logGroups: ['/ecs/cortex-api-dr'],
+    tags: { Environment: 'prod', Service: 'cortex-api', Owner: 'platform-eng', Role: 'dr' },
+    props: [
+      ['Task definition', 'cortex-api:184'],
+      ['Launch type', 'Fargate · 1 vCPU / 2 GB'],
+      ['Private IPv4', '10.1.11.37'],
+    ],
+  }),
+  mk({
+    id: 'dr-rds',
+    type: 'rds',
+    category: 'database',
+    name: 'dr-pg-replica',
+    abbr: 'RDS',
+    subtitle: 'cross-region replica',
+    typeLabel: 'RDS PostgreSQL replica',
+    region: USW2,
+    az: 'us-west-2a',
+    vpcId: DR_VPC,
+    subnetId: DR_PRIV,
+    parentId: DR_PRIV,
+    state: 'available',
+    service: 'rds',
+    resource: 'db:dr-pg-replica',
+    consoleId: 'dr-pg-replica',
+    securityGroupIds: ['sg-0dr3pg'],
+    monthlyCostUsd: 642,
+    logGroups: ['/aws/rds/instance/dr-pg-replica/postgresql'],
+    tags: { Environment: 'prod', Service: 'cortex-api', Owner: 'platform-eng', Role: 'dr' },
+    props: [
+      ['Engine', 'PostgreSQL 15.4'],
+      ['Role', 'Cross-region read replica of prod-pg-primary'],
+      ['Instance class', 'db.r6g.2xlarge'],
+      // Off on purpose: a DR replica with Performance Insights disabled is a
+      // realistic and common state, and the demo should show the empty state
+      // the Load tab gives for it.
+      ['Performance Insights', 'disabled'],
+      ['Private IP', '10.1.11.90'],
+      ['Publicly accessible', 'no'],
+    ],
+  }),
+  mk({
+    id: 'dr-s3-backups',
+    type: 's3',
+    category: 'storage',
+    name: 'prod-dr-backups',
+    abbr: 'S3',
+    subtitle: 'S3 bucket',
+    typeLabel: 'S3 bucket',
+    region: USW2,
+    parentId: `lane:${USW2}`,
+    state: 'active',
+    service: 's3',
+    resource: 'prod-dr-backups',
+    consoleId: 'prod-dr-backups',
+    monthlyCostUsd: 55,
+    tags: { Environment: 'prod', Service: 'backups', Owner: 'platform-eng', Role: 'dr' },
+    props: [
+      ['Bucket', 'prod-dr-backups'],
+      ['Size', '2.1 TiB'],
+      ['Replication', 'from prod-assets (CRR)'],
+      ['Encryption', 'SSE-KMS'],
+      ['Object Lock', 'governance · 35 days'],
+    ],
+  }),
+  mk({
+    id: 'dr-lambda-sync',
+    type: 'lambda',
+    category: 'compute',
+    name: 'dr-state-sync',
+    abbr: 'λ',
+    subtitle: 'Lambda',
+    typeLabel: 'Lambda function',
+    region: USW2,
+    parentId: `lane:${USW2}`,
+    state: 'active',
+    service: 'lambda',
+    resource: 'function:dr-state-sync',
+    consoleId: 'dr-state-sync',
+    monthlyCostUsd: 9,
+    logGroups: ['/aws/lambda/dr-state-sync'],
+    tags: { Environment: 'prod', Service: 'backups', Owner: 'platform-eng', Role: 'dr' },
+    props: [
+      ['Runtime', 'nodejs22.x · arm64'],
+      ['Memory', '512 MB · timeout 120s'],
+      ['Trigger', 'EventBridge rate(15 minutes)'],
+    ],
+  }),
+]
+
+// ---------------------------------------------------------------------------
+// eu-west-1 (edge services only, no VPC)
+// ---------------------------------------------------------------------------
+
+const EUW1 = 'eu-west-1'
+
+const euwest1: GraphNode[] = [
+  regionNode(EUW1),
+  laneNode(`lane:${EUW1}`, EUW1, 'Regional services'),
+  mk({
+    id: 'eu-s3-assets',
+    type: 's3',
+    category: 'storage',
+    name: 'prod-assets-eu',
+    abbr: 'S3',
+    subtitle: 'S3 bucket',
+    typeLabel: 'S3 bucket',
+    region: EUW1,
+    parentId: `lane:${EUW1}`,
+    state: 'active',
+    service: 's3',
+    resource: 'prod-assets-eu',
+    consoleId: 'prod-assets-eu',
+    monthlyCostUsd: 21,
+    tags: { Environment: 'prod', Service: 'cortex-api', Owner: 'platform-eng', Residency: 'eu' },
+    props: [
+      ['Bucket', 'prod-assets-eu'],
+      ['Size', '96 GiB'],
+      ['Encryption', 'SSE-KMS'],
+      ['Residency', 'EU data only'],
+    ],
+  }),
+  mk({
+    id: 'eu-lambda-edge',
+    type: 'lambda',
+    category: 'compute',
+    name: 'eu-consent-gate',
+    abbr: 'λ',
+    subtitle: 'Lambda',
+    typeLabel: 'Lambda function',
+    region: EUW1,
+    parentId: `lane:${EUW1}`,
+    state: 'active',
+    service: 'lambda',
+    resource: 'function:eu-consent-gate',
+    consoleId: 'eu-consent-gate',
+    monthlyCostUsd: 12,
+    logGroups: ['/aws/lambda/eu-consent-gate'],
+    tags: { Environment: 'prod', Service: 'cortex-api', Owner: 'platform-eng', Residency: 'eu' },
+    props: [
+      ['Runtime', 'python3.12 · arm64'],
+      ['Memory', '512 MB · timeout 10s'],
+      ['Trigger', 'API Gateway'],
+    ],
+  }),
+  mk({
+    id: 'eu-sqs-events',
+    type: 'sqs',
+    category: 'integration',
+    name: 'eu-consent-events',
+    abbr: 'SQS',
+    subtitle: 'SQS queue',
+    typeLabel: 'SQS queue',
+    region: EUW1,
+    parentId: `lane:${EUW1}`,
+    state: 'active',
+    service: 'sqs',
+    resource: 'eu-consent-events',
+    consoleId: `https://sqs.eu-west-1.amazonaws.com/${DEMO_ACCOUNT_ID}/eu-consent-events`,
+    monthlyCostUsd: 2,
+    tags: { Environment: 'prod', Service: 'cortex-api', Owner: 'platform-eng', Residency: 'eu' },
+    props: [
+      ['Queue', 'eu-consent-events'],
+      ['Type', 'FIFO'],
+      ['Retention', '14 days'],
+    ],
+  }),
+]
+
+const apsoutheast2: GraphNode[] = [regionNode('ap-southeast-2')]
+
+export const INTERNET_NODE: GraphNode = mk({
+  id: INTERNET_NODE_ID,
+  type: 'internet',
+  category: 'security',
+  name: '0.0.0.0/0',
+  abbr: 'WWW',
+  subtitle: 'internet',
+  typeLabel: 'Public internet',
+  region: 'global',
+  parentId: null,
+  state: '—',
+  tags: {},
+  props: [['CIDR', '0.0.0.0/0'], ['Description', 'Synthetic node for world-open rules']],
+})
+
+export const DEMO_NODES: GraphNode[] = [
+  ...globalLane,
+  ...useast1Containers,
+  ...useast1Regional,
+  ...useast1Vpc,
+  ...uswest2,
+  ...euwest1,
+  ...apsoutheast2,
+  INTERNET_NODE,
+]
+
+// ---------------------------------------------------------------------------
+// Security groups
+// ---------------------------------------------------------------------------
+
+export const DEMO_SECURITY_GROUPS: SecurityGroup[] = [
+  {
+    id: 'sg-0d17f3aa',
+    name: 'sg-alb-public',
+    description: 'Public entry point for the API load balancer',
+    vpcId: PROD_VPC,
+    rules: [
+      { direction: 'in', protocol: 'tcp', port: '443', fromPort: 443, toPort: 443, source: '0.0.0.0/0', description: 'HTTPS from the internet' },
+      { direction: 'in', protocol: 'tcp', port: '80', fromPort: 80, toPort: 80, source: '0.0.0.0/0', description: 'HTTP redirect' },
+      { direction: 'out', protocol: 'tcp', port: '8080', fromPort: 8080, toPort: 8080, source: 'sg-02cc91b4', description: 'To API tasks' },
+    ],
+  },
+  {
+    id: 'sg-02cc91b4',
+    name: 'sg-api-tasks',
+    description: 'cortex-api Fargate tasks',
+    vpcId: PROD_VPC,
+    rules: [
+      { direction: 'in', protocol: 'tcp', port: '8080', fromPort: 8080, toPort: 8080, source: 'sg-0d17f3aa', description: 'From the ALB' },
+      { direction: 'out', protocol: 'tcp', port: '5432', fromPort: 5432, toPort: 5432, source: 'sg-0b41c7e2' },
+      { direction: 'out', protocol: 'tcp', port: '6379', fromPort: 6379, toPort: 6379, source: 'sg-0771be05' },
+      { direction: 'out', protocol: 'tcp', port: '443', fromPort: 443, toPort: 443, source: '0.0.0.0/0' },
+    ],
+  },
+  {
+    id: 'sg-0b41c7e2',
+    name: 'sg-prod-pg',
+    description: 'PostgreSQL primary and standby',
+    vpcId: PROD_VPC,
+    rules: [
+      { direction: 'in', protocol: 'tcp', port: '5432', fromPort: 5432, toPort: 5432, source: 'sg-02cc91b4', description: 'From API tasks' },
+      { direction: 'in', protocol: 'tcp', port: '5432', fromPort: 5432, toPort: 5432, source: 'sg-0c33d901', description: 'From the batch runner' },
+      { direction: 'out', protocol: '-1', port: 'all', fromPort: null, toPort: null, source: '0.0.0.0/0' },
+    ],
+  },
+  {
+    id: 'sg-0771be05',
+    name: 'sg-cortex-cache',
+    description: 'ElastiCache Redis',
+    vpcId: PROD_VPC,
+    rules: [
+      { direction: 'in', protocol: 'tcp', port: '6379', fromPort: 6379, toPort: 6379, source: 'sg-02cc91b4', description: 'From API tasks' },
+      { direction: 'out', protocol: '-1', port: 'all', fromPort: null, toPort: null, source: '0.0.0.0/0' },
+    ],
+  },
+  {
+    id: 'sg-0e91aa30',
+    name: 'sg-legacy-worker',
+    description: 'Left over from the 2024 migration',
+    vpcId: PROD_VPC,
+    rules: [
+      { direction: 'in', protocol: 'tcp', port: '22', fromPort: 22, toPort: 22, source: '0.0.0.0/0', description: 'SSH — never narrowed after the migration' },
+      { direction: 'in', protocol: 'tcp', port: '8080', fromPort: 8080, toPort: 8080, source: 'sg-02cc91b4' },
+      { direction: 'out', protocol: '-1', port: 'all', fromPort: null, toPort: null, source: '0.0.0.0/0' },
+    ],
+  },
+  {
+    id: 'sg-0c33d901',
+    name: 'sg-batch-runner',
+    description: 'Nightly batch processing',
+    vpcId: PROD_VPC,
+    rules: [
+      { direction: 'in', protocol: 'tcp', port: '22', fromPort: 22, toPort: 22, source: '10.0.0.0/16', description: 'SSH from inside the VPC only' },
+      { direction: 'out', protocol: 'tcp', port: '5432', fromPort: 5432, toPort: 5432, source: 'sg-0b41c7e2' },
+      { direction: 'out', protocol: 'tcp', port: '443', fromPort: 443, toPort: 443, source: '0.0.0.0/0' },
+    ],
+  },
+  {
+    id: 'sg-0dr1alb',
+    name: 'sg-dr-alb',
+    description: 'DR load balancer',
+    vpcId: DR_VPC,
+    rules: [
+      { direction: 'in', protocol: 'tcp', port: '443', fromPort: 443, toPort: 443, source: '0.0.0.0/0' },
+      { direction: 'out', protocol: 'tcp', port: '8080', fromPort: 8080, toPort: 8080, source: 'sg-0dr2task' },
+    ],
+  },
+  {
+    id: 'sg-0dr2task',
+    name: 'sg-dr-tasks',
+    description: 'DR Fargate tasks',
+    vpcId: DR_VPC,
+    rules: [
+      { direction: 'in', protocol: 'tcp', port: '8080', fromPort: 8080, toPort: 8080, source: 'sg-0dr1alb' },
+      { direction: 'out', protocol: 'tcp', port: '5432', fromPort: 5432, toPort: 5432, source: 'sg-0dr3pg' },
+    ],
+  },
+  {
+    id: 'sg-0dr3pg',
+    name: 'sg-dr-pg',
+    description: 'DR PostgreSQL replica',
+    vpcId: DR_VPC,
+    rules: [
+      { direction: 'in', protocol: 'tcp', port: '5432', fromPort: 5432, toPort: 5432, source: 'sg-0dr2task' },
+      { direction: 'out', protocol: '-1', port: 'all', fromPort: null, toPort: null, source: '0.0.0.0/0' },
+    ],
+  },
+]
+
+// ---------------------------------------------------------------------------
+// Edges that describe output gives us directly (traffic + events).
+// SG-derived and risk edges are computed by analyzeSecurityGroups().
+// ---------------------------------------------------------------------------
+
+function edge(
+  source: string,
+  target: string,
+  kind: GraphEdge['kind'],
+  label: string,
+  meta: Record<string, string> = {},
+): GraphEdge {
+  return { id: `${kind}:${source}->${target}:${label}`, source, target, kind, label, meta }
+}
+
+export const DEMO_EDGES: GraphEdge[] = [
+  edge('route53', 'cloudfront', 'traffic', '443', { via: 'alias record' }),
+  edge('waf', 'cloudfront', 'traffic', 'inspect', { via: 'web ACL association' }),
+  edge('cloudfront', 's3-assets', 'traffic', '443', { via: 'origin' }),
+  edge('cloudfront', 'alb', 'traffic', '443', { via: 'origin' }),
+  edge('alb', 'ecs-1', 'traffic', '8080', { via: 'tg-api' }),
+  edge('alb', 'ecs-2', 'traffic', '8080', { via: 'tg-api' }),
+  edge('alb', 'ecs-3', 'traffic', '8080', { via: 'tg-api' }),
+  edge('rds-primary', 'rds-standby', 'traffic', '5432', { via: 'multi-AZ replication' }),
+  edge('rds-primary', 'dr-rds', 'traffic', '5432', { via: 'cross-region replication' }),
+  edge('nat-a', 'fw-a', 'traffic', 'egress', { via: 'route table' }),
+  edge('nat-b', 'fw-b', 'traffic', 'egress', { via: 'route table' }),
+  edge('s3-uploads', 'lambda', 'event', 's3:ObjectCreated', { via: 'bucket notification' }),
+  edge('lambda', 'sqs', 'event', 'sendMessage', { via: 'destination' }),
+  edge('lambda', 's3-assets', 'event', 'putObject', { via: 'function code' }),
+  edge('s3-assets', 'dr-s3-backups', 'event', 'replicate', { via: 'CRR rule' }),
+  edge('dr-alb', 'dr-ecs-1', 'traffic', '8080', { via: 'tg-dr-api' }),
+  edge('dr-alb', 'dr-ecs-2', 'traffic', '8080', { via: 'tg-dr-api' }),
+  edge('eu-lambda-edge', 'eu-sqs-events', 'event', 'sendMessage', { via: 'destination' }),
+  edge('eu-lambda-edge', 'eu-s3-assets', 'event', 'putObject', { via: 'function code' }),
+]
