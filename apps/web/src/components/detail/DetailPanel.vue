@@ -14,6 +14,7 @@ import DbLoadTab from './DbLoadTab.vue'
 import MetricsTab from './MetricsTab.vue'
 import OverviewTab from './OverviewTab.vue'
 import SecurityTab from './SecurityTab.vue'
+import ComplianceTab from './ComplianceTab.vue'
 import TagsTab from './TagsTab.vue'
 
 const app = useAppStore()
@@ -28,6 +29,7 @@ const ALL_TABS: Array<{ id: DetailTab; label: string; only?: string[] }> = [
   { id: 'db-load', label: 'Load', only: ['rds'] },
   { id: 'connections', label: 'Connections' },
   { id: 'security', label: 'Security' },
+  { id: 'compliance', label: 'Compliance' },
   { id: 'tags', label: 'Tags' },
   { id: 'json', label: 'JSON' },
 ]
@@ -214,6 +216,7 @@ async function copy(kind: 'arn' | 'ssm'): Promise<void> {
       <DbLoadTab v-else-if="app.detailTab === 'db-load'" :key="node.id" :node="node" />
       <ConnectionsTab v-else-if="app.detailTab === 'connections'" :node="node" />
       <SecurityTab v-else-if="app.detailTab === 'security'" :node="node" />
+      <ComplianceTab v-else-if="app.detailTab === 'compliance'" :node="node" />
       <TagsTab v-else-if="app.detailTab === 'tags'" :node="node" />
       <JsonTab v-else-if="app.detailTab === 'json'" :node="node" />
     </div>

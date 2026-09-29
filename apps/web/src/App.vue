@@ -14,6 +14,7 @@ import FirstRun from '@/components/views/FirstRun.vue'
 import HealthView from '@/components/views/HealthView.vue'
 import InventoryView from '@/components/views/InventoryView.vue'
 import AnalyticsView from '@/components/views/AnalyticsView.vue'
+import ComplianceView from '@/components/views/ComplianceView.vue'
 import LogsView from '@/components/views/LogsView.vue'
 import ResourceDetailView from '@/components/views/ResourceDetailView.vue'
 
@@ -140,6 +141,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
         <InventoryView v-else-if="app.view === 'inventory'" />
         <LogsView v-else-if="app.view === 'logs'" />
         <AnalyticsView v-else-if="app.view === 'analytics'" />
+        <ComplianceView v-else-if="app.view === 'compliance'" />
         <ResourceDetailView v-else-if="app.view === 'resource'" />
       </main>
 

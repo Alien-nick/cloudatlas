@@ -1,6 +1,7 @@
 import type {
   Alarm,
   AlarmsResponse,
+  ComplianceReport,
   FindingsResponse,
   Graph,
   Identity,
@@ -96,6 +97,8 @@ export const api = {
   metrics: (body: MetricsRequest) => post<MetricsResponse>('/api/metrics', body),
 
   findings: () => request<FindingsResponse>('/api/findings'),
+  /** Null until the first scan completes. */
+  compliance: () => request<ComplianceReport | null>('/api/compliance'),
   alarms: (state?: string) =>
     request<AlarmsResponse>(`/api/alarms${state ? `?state=${encodeURIComponent(state)}` : ''}`),
   alarmHistory: (name: string, region: string) =>
