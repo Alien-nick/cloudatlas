@@ -5,7 +5,7 @@
     "us-west-2"
   ],
   "healthPollSeconds": 60,
-  "autoRefreshSeconds": 0,
+  "autoRefreshSeconds": 600,
   "enableCostExplorer": false,
   "redactAccountIds": false,
   "detection": {

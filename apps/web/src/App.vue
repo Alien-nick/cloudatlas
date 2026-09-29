@@ -13,6 +13,7 @@ import CanvasView from '@/components/views/CanvasView.vue'
 import FirstRun from '@/components/views/FirstRun.vue'
 import HealthView from '@/components/views/HealthView.vue'
 import InventoryView from '@/components/views/InventoryView.vue'
+import AnalyticsView from '@/components/views/AnalyticsView.vue'
 import LogsView from '@/components/views/LogsView.vue'
 import ResourceDetailView from '@/components/views/ResourceDetailView.vue'
 
@@ -22,6 +23,7 @@ const health = useHealthStore()
 
 const showFirstRun = ref(false)
 let healthTimer: number | null = null
+let scanTimer: number | null = null
 
 const isCanvasView = computed(
   () => app.view === 'topology' || app.view === 'network' || app.view === 'security',
@@ -59,7 +61,37 @@ watch(
   { immediate: true },
 )
 
+/**
+ * Re-scan on the configured interval.
+ *
+ * Separate from the health poll, and much slower, because the two answer
+ * different questions. Health re-reads metrics and findings for resources that
+ * already exist; a scan re-reads the estate itself and is the only thing that
+ * notices an instance appearing or a security group changing.
+ *
+ * Skipped while a scan is already running and while the user is reading a
+ * resource page, because re-laying out the diagram underneath someone is worse
+ * than a slightly stale one.
+ */
+watch(
+  () => app.info?.autoRefreshSeconds ?? 600,
+  (seconds) => {
+    if (scanTimer !== null) window.clearInterval(scanTimer)
+    scanTimer = null
+    if (seconds <= 0) return
+    scanTimer = window.setInterval(
+      () => {
+        if (!app.profile || graph.scanning || app.view === 'resource') return
+        graph.startScan(app.profile, graph.selectedRegions)
+      },
+      Math.max(60, seconds) * 1000,
+    )
+  },
+  { immediate: true },
+)
+
 onBeforeUnmount(() => {
+  if (scanTimer !== null) window.clearInterval(scanTimer)
   if (healthTimer !== null) window.clearInterval(healthTimer)
   graph.cancelScan()
 })
@@ -107,6 +139,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
         <HealthView v-else-if="app.view === 'health'" />
         <InventoryView v-else-if="app.view === 'inventory'" />
         <LogsView v-else-if="app.view === 'logs'" />
+        <AnalyticsView v-else-if="app.view === 'analytics'" />
         <ResourceDetailView v-else-if="app.view === 'resource'" />
       </main>
 

@@ -128,6 +128,45 @@ test.describe('database load', () => {
   })
 })
 
+test.describe('analytics', () => {
+  test('reports coverage against every resource, gaps included', async ({ page }) => {
+    await scanned(page)
+    await page.getByText('Analytics', { exact: true }).first().click()
+
+    const view = page.getByRole('main')
+    await expect(view.getByText('OBSERVABILITY COVERAGE')).toBeVisible()
+
+    // The denominator is every resource, not just the measurable ones — a
+    // percentage computed over what a tool can measure always looks good.
+    await expect(view.getByText(/\d+ of \d+/).first()).toBeVisible()
+    await expect(view.getByText(/uncovered —/).first()).toBeVisible()
+
+    // Health state is carried by a label and a count, never colour alone.
+    await expect(view.getByText('Not assessed')).toBeVisible()
+    await expect(view.getByText('BLIND SPOTS')).toBeVisible()
+  })
+
+  test('a blind spot opens the resource it names', async ({ page }) => {
+    await scanned(page)
+    await page.getByText('Analytics', { exact: true }).first().click()
+    const gaps = page.getByRole('main').locator('button').filter({ hasText: /Security group|Internet gateway|IAM role/ })
+    if ((await gaps.count()) === 0) test.skip(true, 'no blind spots in this fixture')
+    await gaps.first().click()
+    await expect(page.locator('.ca-detail-heading').first()).toBeVisible()
+  })
+})
+
+test.describe('automatic syncing', () => {
+  test('is on by default at ten minutes', async ({ page }) => {
+    const response = await page.request.get('/api/info', {
+      headers: { Origin: 'http://127.0.0.1:5173' },
+    })
+    const info = (await response.json()) as { autoRefreshSeconds: number }
+    // Previously defined in the config schema and read by nothing.
+    expect(info.autoRefreshSeconds).toBe(600)
+  })
+})
+
 test.describe('resource detail page', () => {
   test('opens a full breakdown and returns where it came from', async ({ page }) => {
     await scanned(page)

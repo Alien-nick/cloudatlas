@@ -74,6 +74,7 @@ export async function registerRoutes(app: FastifyInstance, ctx: RouteContext): P
     costEnabled: config.enableCostExplorer,
     defaultRegions: config.defaultRegions,
     healthPollSeconds: config.healthPollSeconds,
+    autoRefreshSeconds: config.autoRefreshSeconds,
     unimplemented: UNIMPLEMENTED,
   }))
 

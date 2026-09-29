@@ -37,6 +37,7 @@ export const serverInfoSchema = z.object({
   defaultRegions: z.array(z.string()),
   /** How often the UI should re-evaluate health, in seconds. */
   healthPollSeconds: z.number(),
+  autoRefreshSeconds: z.number(),
   /** Milestones not yet built, surfaced so the UI can show honest empty states. */
   unimplemented: z.array(z.string()),
 })
@@ -168,7 +169,8 @@ export const configSchema = z.object({
   /** Seconds between health evaluations. */
   healthPollSeconds: z.number().min(10).default(60),
   /** Seconds between automatic re-scans; 0 disables. */
-  autoRefreshSeconds: z.number().min(0).default(0),
+  /** Re-scan interval. 0 disables it; 600 is ten minutes. */
+  autoRefreshSeconds: z.number().min(0).default(600),
   /** Cost Explorer is billed per request, so it is opt-in. */
   enableCostExplorer: z.boolean().default(false),
   /** Replace account ids with a placeholder before sending to Anthropic. */

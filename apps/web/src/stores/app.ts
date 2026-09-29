@@ -10,6 +10,7 @@ export type ViewId =
   | 'security'
   | 'logs'
   | 'inventory'
+  | 'analytics'
   /** A single resource, full page. Reached from a resource, not the sidebar. */
   | 'resource'
 export type DetailTab =
@@ -31,6 +32,7 @@ export const VIEWS: Array<{ id: ViewId; label: string }> = [
   { id: 'security', label: 'Security Groups' },
   { id: 'logs', label: 'Logs' },
   { id: 'inventory', label: 'Inventory' },
+  { id: 'analytics', label: 'Analytics' },
 ]
 
 const THEME_KEY = 'cloudatlas:theme'
