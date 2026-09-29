@@ -15,6 +15,7 @@ import { openSse } from './sse.js'
 import { runAgent } from '../agent/run.js'
 import { streamMetrics } from '../metrics/stream.js'
 import { launchSsmTerminal, TerminalLaunchError } from '../terminal/ssm.js'
+import { evaluateCompliance } from '../compliance/evaluate.js'
 
 const metricStreamQuery = z.object({
   nodeIds: z.string().min(1),
@@ -134,6 +135,15 @@ export async function registerRoutes(app: FastifyInstance, ctx: RouteContext): P
     // a 404 shows up as a console error in the browser for no good reason.
     if (!graph) return reply.code(204).send()
     return graph
+  })
+
+  // Derived from the graph on each request rather than stored: it is a pure
+  // function over a few hundred nodes, and computing it fresh means it can
+  // never disagree with the scan it describes.
+  app.get('/api/compliance', async (_request, reply) => {
+    const graph = provider.getGraph()
+    if (!graph) return reply.code(204).send()
+    return evaluateCompliance(graph)
   })
 
   // ---- metrics ----------------------------------------------------------
