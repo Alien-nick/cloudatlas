@@ -237,12 +237,19 @@ The managed `ReadOnlyAccess` policy is enough to get started, with one confirmed
 `AccessDenied`, the collector records it, the scan continues, and the affected panel shows a
 "missing permission" notice. A partial diagram beats no diagram.
 
-### Why there is no in-browser shell
+### Connecting to an instance
 
-The Session Manager button copies
-`aws ssm start-session --target <id> --profile <p> --region <r>` to your clipboard rather than
-opening a terminal. Starting a session is a mutating API call, which the read-only guard forbids by
-design.
+**Connect in terminal** on an EC2 instance opens your own terminal (the default `.command` handler
+on macOS, `start` on Windows, `$TERMINAL` or the first known emulator on Linux) running
+`aws ssm start-session --target <id> --profile <p> --region <r>`. **Copy command** puts the same
+line on your clipboard instead.
+
+This does not weaken the read-only guarantee. CloudAtlas makes no AWS call: the session is started
+by your AWS CLI, in a window you can see, exactly as if you had pasted the command. The server
+takes only a node ID from the browser, resolves the instance and region from the scanned graph,
+checks the profile against the ones it listed, and validates every token against a strict pattern
+before it reaches a shell. You need the AWS CLI and the Session Manager plugin installed. There is
+still no in-browser shell.
 
 ---
 

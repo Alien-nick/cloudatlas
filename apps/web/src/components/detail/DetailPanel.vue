@@ -2,6 +2,7 @@
 import { computed, watch, ref } from 'vue'
 import { useAppStore, type DetailTab } from '@/stores/app'
 import { useGraphStore } from '@/stores/graph'
+import { api } from '@/lib/api'
 import { copyText, nodeColor } from '@/lib/utils'
 import CaStatePill from '../ui/CaStatePill.vue'
 import CaTile from '../ui/CaTile.vue'
@@ -58,6 +59,28 @@ const ssmCommand = computed(() => {
   const instanceId = current.props.find((p) => p.k === 'Instance ID')?.v ?? current.name
   return `aws ssm start-session --target ${instanceId} --profile ${app.profile} --region ${current.region}`
 })
+
+type TerminalState = { kind: 'idle' | 'opening' | 'opened' } | { kind: 'error'; message: string }
+const terminal = ref<TerminalState>({ kind: 'idle' })
+
+watch(node, () => {
+  terminal.value = { kind: 'idle' }
+})
+
+async function openTerminal(): Promise<void> {
+  const current = node.value
+  if (!current || terminal.value.kind === 'opening') return
+  terminal.value = { kind: 'opening' }
+  try {
+    await api.openSsmTerminal(current.id, app.profile)
+    terminal.value = { kind: 'opened' }
+    window.setTimeout(() => {
+      if (terminal.value.kind === 'opened') terminal.value = { kind: 'idle' }
+    }, 2400)
+  } catch (error) {
+    terminal.value = { kind: 'error', message: (error as Error).message }
+  }
+}
 
 async function copy(kind: 'arn' | 'ssm'): Promise<void> {
   const text = kind === 'arn' ? (node.value?.arn ?? '') : ssmCommand.value
@@ -129,18 +152,41 @@ async function copy(kind: 'arn' | 'ssm'): Promise<void> {
         View details
       </button>
 
-      <button
-        v-if="canSsm"
-        type="button"
-        class="mt-[9px] flex h-[32px] w-full cursor-pointer items-center justify-center gap-2 rounded-[7px] border border-border2 bg-raise text-[12.5px] font-medium text-text hover:border-text"
-        :title="`Copies: ${ssmCommand}\n\nCloudAtlas is read-only and has no in-browser shell — run the command in your terminal.`"
-        @click="copy('ssm')"
-      >
-        <span class="font-mono text-[11px] text-muted">▸_</span>
-        <span>{{
-          copied === 'ssm' ? 'Command copied to clipboard' : 'Session Manager command'
-        }}</span>
-      </button>
+      <!-- Opens the user's own terminal on the command; CloudAtlas itself
+           makes no AWS call, so the read-only guarantee holds. -->
+      <div v-if="canSsm" class="mt-[9px] flex gap-[6px]">
+        <button
+          type="button"
+          class="flex h-[32px] min-w-0 flex-1 cursor-pointer items-center justify-center gap-2 rounded-[7px] border border-border2 bg-raise text-[12.5px] font-medium text-text hover:border-text disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border2"
+          :disabled="app.isDemo || terminal.kind === 'opening'"
+          :title="
+            app.isDemo
+              ? 'Demo instances are not real — copy the command to see what would run.'
+              : `Opens your terminal and runs:\n${ssmCommand}\n\nNeeds the AWS CLI and the Session Manager plugin.`
+          "
+          @click="openTerminal"
+        >
+          <span class="font-mono text-[11px] text-muted">▸_</span>
+          <span class="truncate">{{
+            terminal.kind === 'opening'
+              ? 'Opening terminal…'
+              : terminal.kind === 'opened'
+                ? 'Opened in your terminal'
+                : 'Connect in terminal'
+          }}</span>
+        </button>
+        <button
+          type="button"
+          class="h-[32px] shrink-0 cursor-pointer rounded-[7px] border border-border2 bg-transparent px-[10px] text-[11.5px] text-muted hover:border-text hover:text-text"
+          :title="`Copies: ${ssmCommand}`"
+          @click="copy('ssm')"
+        >
+          {{ copied === 'ssm' ? 'Copied' : 'Copy command' }}
+        </button>
+      </div>
+      <p v-if="canSsm && terminal.kind === 'error'" class="mt-[6px] text-[11px] text-bad">
+        {{ terminal.message }}
+      </p>
     </div>
 
     <div class="ca-scroll-none flex gap-px overflow-x-auto border-b border-border px-2 py-[6px]">

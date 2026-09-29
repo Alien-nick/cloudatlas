@@ -14,6 +14,7 @@ import { UNIMPLEMENTED, VERSION } from '../config.js'
 import { openSse } from './sse.js'
 import { runAgent } from '../agent/run.js'
 import { streamMetrics } from '../metrics/stream.js'
+import { launchSsmTerminal, TerminalLaunchError } from '../terminal/ssm.js'
 
 const metricStreamQuery = z.object({
   nodeIds: z.string().min(1),
@@ -57,6 +58,8 @@ const changesQuery = z.object({
   start: z.coerce.number(),
   end: z.coerce.number(),
 })
+
+const ssmTerminalSchema = z.object({ nodeId: z.string().min(1), profile: z.string().min(1) })
 
 const alarmHistoryQuery = z.object({ region: z.string().min(1) })
 const alarmsQuery = z.object({ state: z.string().optional() })
@@ -276,6 +279,42 @@ export async function registerRoutes(app: FastifyInstance, ctx: RouteContext): P
       channel.close()
     }
     return reply
+  })
+
+  // ---- terminal ---------------------------------------------------------
+
+  // Opens the user's terminal on `aws ssm start-session`. The target comes
+  // from the scanned graph, not the request, and the profile must be one we
+  // listed, so the browser can only name an instance, never a command.
+  app.post('/api/terminal/ssm', async (request, reply) => {
+    const body = ssmTerminalSchema.parse(request.body)
+    if (provider.kind === 'demo') {
+      return reply.code(409).send({
+        error: 'Demo instances are not real — there is nothing to connect to.',
+        missingPermission: null,
+        code: 'DEMO',
+      })
+    }
+    const node = provider.getGraph()?.nodes.find((n) => n.id === body.nodeId)
+    const profiles = await provider.listProfiles()
+    if (!node || node.type !== 'ec2' || !profiles.some((p) => p.name === body.profile)) {
+      return reply.code(400).send({
+        error: 'Unknown EC2 instance or profile.',
+        missingPermission: null,
+        code: 'BAD_REQUEST',
+      })
+    }
+    const instanceId = node.props.find((p) => p.k === 'Instance ID')?.v ?? node.name
+    try {
+      return await launchSsmTerminal({ instanceId, profile: body.profile, region: node.region })
+    } catch (error) {
+      if (!(error instanceof TerminalLaunchError)) throw error
+      return reply.code(error.code === 'INVALID_TARGET' ? 400 : 500).send({
+        error: error.message,
+        missingPermission: null,
+        code: error.code,
+      })
+    }
   })
 
   // ---- WAF & change history --------------------------------------------

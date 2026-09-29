@@ -113,6 +113,10 @@ export const api = {
     ),
   wafSampled: (body: WafSampledRequestsRequest) =>
     post<WafSampledResponse>('/api/waf/sampled', body),
+
+  /** Opens the user's terminal on `aws ssm start-session` for an EC2 node. */
+  openSsmTerminal: (nodeId: string, profile: string) =>
+    post<{ command: string }>('/api/terminal/ssm', { nodeId, profile }),
 }
 
 /**
