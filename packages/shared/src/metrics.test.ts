@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  METRIC_CATALOG,
   choosePeriod,
   findMetricDef,
   formatMetricValue,
@@ -88,5 +89,59 @@ describe('formatMetricValue', () => {
     expect(formatMetricValue(1420, '')).toBe('1,420')
     expect(formatMetricValue(93.14, '%')).toBe('93.1 %')
     expect(formatMetricValue(2.437, 'ms')).toBe('2.44 ms')
+  })
+})
+
+describe('catalog units', () => {
+  /**
+   * AWS does not publish in the units people read in, and a catalog that
+   * labels without converting is not a cosmetic problem — it reported a
+   * 400-microsecond latency as "0.00 ms".
+   */
+  const PUBLISHED_IN_OTHER_UNITS = [
+    ['AWS/RDS', 'ReadLatency'],
+    ['AWS/RDS', 'WriteLatency'],
+    ['AWS/RDS', 'FreeableMemory'],
+    ['AWS/RDS', 'FreeStorageSpace'],
+    ['AWS/RDS', 'SwapUsage'],
+    ['AWS/EC2', 'NetworkIn'],
+    ['AWS/EC2', 'NetworkOut'],
+    ['AWS/NetworkELB', 'ProcessedBytes'],
+    ['AWS/S3', 'BucketSizeBytes'],
+  ] as const
+
+  it('converts every metric AWS publishes in a different unit', () => {
+    const all = Object.values(METRIC_CATALOG).flat()
+    for (const [namespace, name] of PUBLISHED_IN_OTHER_UNITS) {
+      const def = all.find((entry) => entry?.namespace === namespace && entry.name === name)
+      expect(def, `${namespace}/${name} missing from the catalog`).toBeDefined()
+      expect(def?.scale, `${namespace}/${name} needs a scale`).toBeDefined()
+      expect(def?.scale).not.toBe(1)
+    }
+  })
+
+  it('leaves metrics already in their display unit unscaled', () => {
+    const all = Object.values(METRIC_CATALOG).flat()
+    // Lambda Duration really is milliseconds; ReplicaLag really is seconds.
+    for (const [namespace, name] of [
+      ['AWS/Lambda', 'Duration'],
+      ['AWS/RDS', 'ReplicaLag'],
+      ['AWS/SQS', 'ApproximateAgeOfOldestMessage'],
+    ] as const) {
+      const def = all.find((entry) => entry?.namespace === namespace && entry.name === name)
+      expect(def?.scale, `${namespace}/${name} should not be scaled`).toBeUndefined()
+    }
+  })
+
+  it('never labels a byte total as a rate', () => {
+    // NetworkIn is bytes per period, not bytes per second; "MB/s" was wrong
+    // twice over — the unit and the dimension.
+    const all = Object.values(METRIC_CATALOG).flat()
+    for (const def of all) {
+      if (!def) continue
+      if (def.unit.endsWith('/s')) {
+        expect(def.name, `${def.name} is a total, not a rate`).not.toMatch(/Bytes|Network/)
+      }
+    }
   })
 })

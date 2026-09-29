@@ -11,7 +11,7 @@ import {
 import { api, ApiError, streamMetrics } from '@/lib/api'
 import { useHealthStore } from '@/stores/health'
 import { categoryColor } from '@/lib/utils'
-import { syncKeyFor } from '@/lib/chart'
+import { syncKeyFor, toDisplay } from '@/lib/chart'
 import CaChart from '../ui/CaChart.vue'
 import CaEmptyState from '../ui/CaEmptyState.vue'
 
@@ -19,6 +19,11 @@ const props = defineProps<{ node: GraphNode }>()
 const health = useHealthStore()
 
 const RANGES = [
+  // 15 minutes is the freshest CloudWatch can be for a standard metric: it
+  // picks a 60-second period, and a 60-second bucket is complete a minute
+  // after it starts. Longer ranges pick coarser buckets, and a coarse bucket
+  // is inherently behind by its own width.
+  { id: '15m', label: '15m', ms: 15 * 60_000 },
   { id: '1h', label: '1h', ms: 60 * 60_000 },
   { id: '6h', label: '6h', ms: 6 * 60 * 60_000 },
   { id: '24h', label: '24h', ms: 24 * 60 * 60_000 },
@@ -47,6 +52,34 @@ const freshness = computed(() => {
   const seconds = Math.round(lagMs.value / 1000)
   if (seconds < 90) return `${seconds}s behind`
   return `${Math.round(seconds / 60)}m behind`
+})
+
+const period = computed(() => series.value[0]?.period ?? null)
+
+/**
+ * Whether the lag is explained by the bucket width rather than by CloudWatch.
+ *
+ * A 15-minute bucket cannot be complete until fifteen minutes have passed, so
+ * a 7-day chart is structurally behind by at least its own resolution. Saying
+ * "22m behind" without that makes it look like something is broken, when the
+ * fix is simply a shorter range.
+ */
+const lagIsBucketWidth = computed(() => {
+  const size = period.value
+  if (size === null || lagMs.value === null) return false
+  return size > 60 && lagMs.value <= size * 1000 * 2.5
+})
+
+const freshnessTitle = computed(() => {
+  if (lagMs.value === null) return 'CloudWatch resolution'
+  if (lagIsBucketWidth.value) {
+    return (
+      `Age of the newest complete datapoint. At this range CloudWatch buckets into ` +
+      `${period.value}s, and a bucket is not complete until that long has passed — so most ` +
+      'of this lag is the bucket width. Pick a shorter range for 60-second buckets.'
+    )
+  }
+  return 'Age of the newest datapoint CloudWatch has published'
 })
 
 let stopStream: (() => void) | null = null
@@ -159,7 +192,9 @@ onBeforeUnmount(() => stopStream?.())
 function latest(item: MetricSeries): number | null {
   for (let i = item.values.length - 1; i >= 0; i--) {
     const value = item.values[i]
-    if (value !== null && value !== undefined) return value
+    // Scaled here so the headline agrees with the chart beneath it; the raw
+    // value is what the detectors compare against.
+    if (value !== null && value !== undefined) return toDisplay(value, defFor(item))
   }
   return null
 }
@@ -178,7 +213,8 @@ function delta(item: MetricSeries): { text: string; up: boolean } | null {
   const first = values[0]
   if (values.length < 2 || last === undefined || first === undefined) return null
 
-  const change = last - first
+  const scale = defFor(item).scale ?? 1
+  const change = (last - first) * scale
   const rendered = formatMetricValue(Math.abs(change), '')
   // Hide a change that rounds away to nothing rather than printing "▲ 0.00".
   if (Number.parseFloat(rendered.replace(/,/g, '')) === 0) return null
@@ -207,14 +243,11 @@ function colorFor(item: MetricSeries): string {
       <span class="h-[6px] w-[6px] rounded-full" :class="live ? 'bg-ok' : 'bg-faint'" />
       <span
         class="whitespace-nowrap text-[11.5px] text-muted"
-        :title="
-          freshness
-            ? 'Age of the newest datapoint CloudWatch has published'
-            : 'CloudWatch resolution'
-        "
+        :title="freshnessTitle"
       >
-        CloudWatch · {{ series[0]?.period ? `${series[0].period}s` : '—' }}
+        CloudWatch · {{ period ? `${period}s` : '—' }}
         <template v-if="freshness"> · {{ freshness }}</template>
+        <template v-if="lagIsBucketWidth"> · mostly bucket width</template>
       </span>
       <div class="ml-auto flex items-center gap-1">
         <button

@@ -66,7 +66,36 @@ export function formatAxisValue(value: number, def: Pick<MetricDef, 'percent'>):
   if (abs >= 10) return value.toFixed(0)
   if (abs >= 1) return value.toFixed(1)
   if (abs === 0) return '0'
-  return value.toFixed(2)
+  // Small values need enough places to stay distinguishable. At two decimals
+  // a sub-centi range collapses to a column of identical "0.00" ticks, which
+  // is an axis that says nothing.
+  if (abs >= 0.01) return value.toFixed(2)
+  if (abs >= 0.001) return value.toFixed(3)
+  return value.toPrecision(2)
+}
+
+/**
+ * Tick labels for a set of splits, widened until they are distinguishable.
+ *
+ * Formatting each tick independently can produce repeats — three ticks all
+ * reading "0.00" for three different values. Checked across the whole set
+ * rather than per value, because the problem only exists between them.
+ */
+export function formatAxisValues(
+  splits: number[],
+  def: Pick<MetricDef, 'percent'>,
+): string[] {
+  const base = splits.map((value) => formatAxisValue(value, def))
+  const distinct = new Set(base).size === base.length
+  if (distinct || def.percent) return base
+
+  for (const digits of [2, 3, 4, 5, 6]) {
+    const widened = splits.map((value) =>
+      Number.isFinite(value) ? value.toPrecision(digits) : '',
+    )
+    if (new Set(widened).size === widened.length) return widened
+  }
+  return base
 }
 
 /**
@@ -79,10 +108,13 @@ export function formatAxisValue(value: number, def: Pick<MetricDef, 'percent'>):
  */
 export function yRange(
   values: Array<number | null>,
-  def: Pick<MetricDef, 'percent'>,
+  def: Pick<MetricDef, 'percent' | 'scale'>,
 ): [number, number] | null {
   if (def.percent) return [0, 100]
-  const present = values.filter((value): value is number => value !== null)
+  const scale = def.scale ?? 1
+  const present = values
+    .filter((value): value is number => value !== null)
+    .map((value) => value * scale)
   if (present.length === 0) return null
 
   const min = Math.min(...present)
@@ -100,12 +132,22 @@ export function yRange(
   return [floor, max + headroom]
 }
 
-/** uPlot wants x in seconds and one array per series. */
-export function toChartData(series: MetricSeries): uPlot.AlignedData {
+/**
+ * uPlot wants x in seconds and one array per series.
+ *
+ * The scale is applied here, at the display boundary, so the detectors keep
+ * comparing raw CloudWatch values against raw thresholds.
+ */
+export function toChartData(series: MetricSeries, scale = 1): uPlot.AlignedData {
   return [
     series.timestamps.map((timestamp) => timestamp / 1000),
-    series.values.map((value) => (value === null ? null : value)),
+    series.values.map((value) => (value === null ? null : value * scale)),
   ] as uPlot.AlignedData
+}
+
+/** Convert a raw CloudWatch value into the unit the catalog displays. */
+export function toDisplay(value: number | null, def: Pick<MetricDef, 'scale'>): number | null {
+  return value === null ? null : value * (def.scale ?? 1)
 }
 
 /**

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { MetricSeries } from '@cloudatlas/shared'
-import { formatAxisValue, toChartData, withAlpha, yRange } from './chart'
+import {
+  formatAxisValue,
+  formatAxisValues,
+  toChartData,
+  toDisplay,
+  withAlpha,
+  yRange,
+} from './chart'
 
 describe('axis formatting', () => {
   it('stays terse, because a tick has no room for a unit', () => {
@@ -73,5 +80,49 @@ describe('colour', () => {
 
   it('passes a non-hex through untouched rather than emitting nonsense', () => {
     expect(withAlpha('var(--ca-compute)', 0.14)).toBe('var(--ca-compute)')
+  })
+})
+
+
+describe('unit scaling', () => {
+  it('converts the unit CloudWatch publishes into the one displayed', () => {
+    // AWS publishes RDS ReadLatency in seconds. Labelling it "ms" without
+    // converting reported a 400-microsecond latency as "0.00 ms".
+    expect(toDisplay(0.0004, { scale: 1000 })).toBeCloseTo(0.4, 6)
+    // And FreeableMemory in bytes, labelled GB.
+    expect(toDisplay(8_589_934_592, { scale: 1 / 1e9 })).toBeCloseTo(8.59, 2)
+  })
+
+  it('passes a value through when the catalog needs no conversion', () => {
+    expect(toDisplay(42, {})).toBe(42)
+    expect(toDisplay(null, { scale: 1000 })).toBeNull()
+  })
+
+  it('scales the chart series, so the plot agrees with the headline', () => {
+    const series = { timestamps: [1000], values: [0.0004] } as never
+    const [, ys] = toChartData(series, 1000)
+    expect(ys?.[0]).toBeCloseTo(0.4, 6)
+  })
+
+  it('scales the y-axis bounds too, or the plot would be drawn off scale', () => {
+    const range = yRange([0.0004, 0.0008], { scale: 1000 })
+    expect(range?.[1]).toBeGreaterThan(0.5)
+  })
+})
+
+describe('axis ticks stay distinguishable', () => {
+  it('widens precision rather than repeating a label', () => {
+    // Three different latencies all formatting as "0.00" is an axis that says
+    // nothing — which is exactly what a sub-centi range produced.
+    const ticks = formatAxisValues([0.0002, 0.0004, 0.0006], {})
+    expect(new Set(ticks).size).toBe(3)
+  })
+
+  it('leaves well-separated ticks alone', () => {
+    expect(formatAxisValues([0, 50, 100], {})).toEqual(['0', '50', '100'])
+  })
+
+  it('formats a small lone value with enough places to be read', () => {
+    expect(formatAxisValue(0.0004, {})).not.toBe('0.00')
   })
 })

@@ -20,6 +20,19 @@ export interface MetricDef {
   label: string
   /** Display unit suffix; empty string for counts. */
   unit: string
+  /**
+   * Multiplier from the unit CloudWatch publishes to the unit we display.
+   *
+   * AWS does not publish in the units people read in. `ReadLatency` is
+   * seconds, `FreeableMemory` is bytes, `NetworkIn` is bytes per period. A
+   * catalog that merely *labels* those as ms and GB is not a cosmetic problem:
+   * it reports a 400-microsecond latency as "0.00 ms" and eight gigabytes of
+   * free memory as eight billion.
+   *
+   * Display only. The detectors compare against raw CloudWatch values, so
+   * alertFloor and alertCeiling stay in the published unit and are unaffected.
+   */
+  scale?: number
   stat: MetricStat
   /** Logical grouping shown as a section header. */
   group: string
@@ -53,15 +66,15 @@ export interface MetricDef {
 const RDS: MetricDef[] = [
   { name: 'CPUUtilization', namespace: 'AWS/RDS', label: 'CPU utilization', unit: '%', stat: 'Average', group: 'Load & connections', primary: true, higherIsWorse: true, alertFloor: 70, percent: true },
   { name: 'DatabaseConnections', namespace: 'AWS/RDS', label: 'Database connections', unit: '', stat: 'Average', group: 'Load & connections', primary: true, higherIsWorse: true },
-  { name: 'FreeableMemory', namespace: 'AWS/RDS', label: 'Freeable memory', unit: 'GB', stat: 'Average', group: 'Load & connections', lowerIsWorse: true },
-  { name: 'ReadLatency', namespace: 'AWS/RDS', label: 'Read latency', unit: 'ms', stat: 'Average', group: 'Latency & IO', primary: true, higherIsWorse: true },
-  { name: 'WriteLatency', namespace: 'AWS/RDS', label: 'Write latency', unit: 'ms', stat: 'Average', group: 'Latency & IO', higherIsWorse: true },
+  { name: 'FreeableMemory', namespace: 'AWS/RDS', label: 'Freeable memory', unit: 'GB', scale: 1 / 1e9, stat: 'Average', group: 'Load & connections', lowerIsWorse: true },
+  { name: 'ReadLatency', namespace: 'AWS/RDS', label: 'Read latency', unit: 'ms', scale: 1000, stat: 'Average', group: 'Latency & IO', primary: true, higherIsWorse: true },
+  { name: 'WriteLatency', namespace: 'AWS/RDS', label: 'Write latency', unit: 'ms', scale: 1000, stat: 'Average', group: 'Latency & IO', higherIsWorse: true },
   { name: 'ReadIOPS', namespace: 'AWS/RDS', label: 'Read IOPS', unit: '/s', stat: 'Average', group: 'Latency & IO' },
   { name: 'WriteIOPS', namespace: 'AWS/RDS', label: 'Write IOPS', unit: '/s', stat: 'Average', group: 'Latency & IO' },
   { name: 'DiskQueueDepth', namespace: 'AWS/RDS', label: 'Disk queue depth', unit: '', stat: 'Average', group: 'Latency & IO', higherIsWorse: true },
-  { name: 'FreeStorageSpace', namespace: 'AWS/RDS', label: 'Free storage', unit: 'GB', stat: 'Average', group: 'Storage & replication', lowerIsWorse: true },
+  { name: 'FreeStorageSpace', namespace: 'AWS/RDS', label: 'Free storage', unit: 'GB', scale: 1 / 1e9, stat: 'Average', group: 'Storage & replication', lowerIsWorse: true },
   { name: 'ReplicaLag', namespace: 'AWS/RDS', label: 'Replica lag', unit: 's', stat: 'Average', group: 'Storage & replication', higherIsWorse: true },
-  { name: 'SwapUsage', namespace: 'AWS/RDS', label: 'Swap usage', unit: 'MB', stat: 'Average', group: 'Storage & replication', higherIsWorse: true },
+  { name: 'SwapUsage', namespace: 'AWS/RDS', label: 'Swap usage', unit: 'MB', scale: 1 / 1e6, stat: 'Average', group: 'Storage & replication', higherIsWorse: true },
   { name: 'BurstBalance', namespace: 'AWS/RDS', label: 'Burst balance', unit: '%', stat: 'Average', group: 'Storage & replication', percent: true, requires: 'gp2 storage', lowerIsWorse: true, alertCeiling: 20 },
 ]
 
@@ -69,8 +82,8 @@ const EC2: MetricDef[] = [
   { name: 'CPUUtilization', namespace: 'AWS/EC2', label: 'CPU utilization', unit: '%', stat: 'Average', group: 'Core', primary: true, higherIsWorse: true, alertFloor: 80, percent: true },
   { name: 'StatusCheckFailed_Instance', namespace: 'AWS/EC2', label: 'Instance status check', unit: '', stat: 'Maximum', group: 'Core', primary: true, higherIsWorse: true, alertFloor: 1 },
   { name: 'StatusCheckFailed_System', namespace: 'AWS/EC2', label: 'System status check', unit: '', stat: 'Maximum', group: 'Core', primary: true, higherIsWorse: true, alertFloor: 1 },
-  { name: 'NetworkIn', namespace: 'AWS/EC2', label: 'Network in', unit: 'MB/s', stat: 'Average', group: 'Network & disk' },
-  { name: 'NetworkOut', namespace: 'AWS/EC2', label: 'Network out', unit: 'MB/s', stat: 'Average', group: 'Network & disk' },
+  { name: 'NetworkIn', namespace: 'AWS/EC2', label: 'Network in', unit: 'MB', scale: 1 / 1e6, stat: 'Average', group: 'Network & disk' },
+  { name: 'NetworkOut', namespace: 'AWS/EC2', label: 'Network out', unit: 'MB', scale: 1 / 1e6, stat: 'Average', group: 'Network & disk' },
   { name: 'EBSReadOps', namespace: 'AWS/EC2', label: 'EBS read ops', unit: '/s', stat: 'Average', group: 'Network & disk' },
   { name: 'EBSWriteOps', namespace: 'AWS/EC2', label: 'EBS write ops', unit: '/s', stat: 'Average', group: 'Network & disk' },
   { name: 'CPUCreditBalance', namespace: 'AWS/EC2', label: 'CPU credit balance', unit: '', stat: 'Average', group: 'Burstable', requires: 't-family instance', lowerIsWorse: true, alertCeiling: 20 },
@@ -102,7 +115,7 @@ const ALB: MetricDef[] = [
 const NLB: MetricDef[] = [
   { name: 'ActiveFlowCount', namespace: 'AWS/NetworkELB', label: 'Active flows', unit: '', stat: 'Average', group: 'Traffic', primary: true },
   { name: 'NewFlowCount', namespace: 'AWS/NetworkELB', label: 'New flows', unit: '/min', stat: 'Sum', group: 'Traffic', primary: true },
-  { name: 'ProcessedBytes', namespace: 'AWS/NetworkELB', label: 'Processed bytes', unit: 'GB', stat: 'Sum', group: 'Traffic' },
+  { name: 'ProcessedBytes', namespace: 'AWS/NetworkELB', label: 'Processed bytes', unit: 'GB', scale: 1 / 1e9, stat: 'Sum', group: 'Traffic' },
   { name: 'TCP_Target_Reset_Count', namespace: 'AWS/NetworkELB', label: 'Target resets', unit: '', stat: 'Sum', group: 'Errors', primary: true, higherIsWorse: true, alertFloor: 5 },
   { name: 'UnHealthyHostCount', namespace: 'AWS/NetworkELB', label: 'Unhealthy hosts', unit: '', stat: 'Maximum', group: 'Errors', higherIsWorse: true, alertFloor: 1, perTargetGroup: true },
   { name: 'HealthyHostCount', namespace: 'AWS/NetworkELB', label: 'Healthy hosts', unit: '', stat: 'Minimum', group: 'Errors', perTargetGroup: true, lowerIsWorse: true, alertCeiling: 1 },
@@ -139,7 +152,7 @@ const CLOUDFRONT: MetricDef[] = [
 ]
 
 const S3: MetricDef[] = [
-  { name: 'BucketSizeBytes', namespace: 'AWS/S3', label: 'Bucket size', unit: 'GB', stat: 'Average', group: 'Storage', primary: true },
+  { name: 'BucketSizeBytes', namespace: 'AWS/S3', label: 'Bucket size', unit: 'GB', scale: 1 / 1e9, stat: 'Average', group: 'Storage', primary: true },
   { name: 'AllRequests', namespace: 'AWS/S3', label: 'All requests', unit: '/min', stat: 'Sum', group: 'Storage', primary: true },
   { name: '4xxErrors', namespace: 'AWS/S3', label: '4xx errors', unit: '', stat: 'Sum', group: 'Storage', higherIsWorse: true },
 ]

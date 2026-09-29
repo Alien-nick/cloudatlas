@@ -4,7 +4,7 @@ import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import { formatMetricValue, type MetricDef, type MetricSeries } from '@cloudatlas/shared'
 import {
-  formatAxisValue,
+  formatAxisValues,
   readTheme,
   toChartData,
   withAlpha,
@@ -100,7 +100,7 @@ function build(): void {
         ticks: { show: false },
         font: '10px ui-sans-serif, system-ui, sans-serif',
         size: 42,
-        values: (_u, splits) => splits.map((value) => formatAxisValue(value, props.def)),
+        values: (_u, splits) => formatAxisValues(splits, props.def),
       },
     ],
     series: [
@@ -129,6 +129,7 @@ function build(): void {
             hovered.value = null
             return
           }
+          // Already scaled into display units when the data was built.
           const value = u.data[1]?.[index]
           const timestamp = u.data[0]?.[index]
           if (timestamp === undefined) {
@@ -144,7 +145,7 @@ function build(): void {
     },
   }
 
-  chart.value = new uPlot(options, toChartData(props.series), element)
+  chart.value = new uPlot(options, toChartData(props.series, props.def.scale ?? 1), element)
 }
 
 function destroy(): void {
@@ -190,7 +191,7 @@ watch(
     const range = yRange(next.values, props.def)
     const yScale = chart.value.scales.y
     if (range && yScale) yScale.range = () => range
-    chart.value.setData(toChartData(next))
+    chart.value.setData(toChartData(next, props.def.scale ?? 1))
   },
 )
 
