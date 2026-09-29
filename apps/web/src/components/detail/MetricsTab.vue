@@ -56,6 +56,13 @@ const freshness = computed(() => {
 
 const period = computed(() => series.value[0]?.period ?? null)
 
+/** "15-minute" rather than "900s" — the header is prose, not a field dump. */
+function humanPeriod(seconds: number): string {
+  if (seconds < 60) return `${seconds}-second`
+  if (seconds < 3600) return `${Math.round(seconds / 60)}-minute`
+  return `${Math.round(seconds / 3600)}-hour`
+}
+
 /**
  * Whether the lag is explained by the bucket width rather than by CloudWatch.
  *
@@ -68,6 +75,24 @@ const lagIsBucketWidth = computed(() => {
   const size = period.value
   if (size === null || lagMs.value === null) return false
   return size > 60 && lagMs.value <= size * 1000 * 2.5
+})
+
+/**
+ * The header in plain language.
+ *
+ * It previously read "CloudWatch · 900s · 22m behind · mostly bucket width",
+ * which is four facts in shorthand and a sentence in none. The reader's
+ * question is "why is this not current, and can I do anything about it" — so
+ * the line answers that, and the tooltip carries the detail.
+ */
+const headline = computed(() => {
+  if (period.value === null) return 'Waiting for CloudWatch…'
+  const bucket = humanPeriod(period.value)
+  if (freshness.value === null) return `${bucket} averages from CloudWatch`
+  if (lagIsBucketWidth.value) {
+    return `${bucket} averages — newest is ${freshness.value}, because a ${bucket} average is only complete once that long has passed`
+  }
+  return `${bucket} averages — newest is ${freshness.value}`
 })
 
 const freshnessTitle = computed(() => {
@@ -242,12 +267,10 @@ function colorFor(item: MetricSeries): string {
     <div class="mb-3 flex items-center gap-[7px]">
       <span class="h-[6px] w-[6px] rounded-full" :class="live ? 'bg-ok' : 'bg-faint'" />
       <span
-        class="whitespace-nowrap text-[11.5px] text-muted"
+        class="min-w-0 flex-1 text-[11.5px] leading-[1.45] text-muted"
         :title="freshnessTitle"
       >
-        CloudWatch · {{ period ? `${period}s` : '—' }}
-        <template v-if="freshness"> · {{ freshness }}</template>
-        <template v-if="lagIsBucketWidth"> · mostly bucket width</template>
+        {{ headline }}
       </span>
       <div class="ml-auto flex items-center gap-1">
         <button

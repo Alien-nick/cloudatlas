@@ -41,9 +41,9 @@ test.describe('metrics', () => {
     // One streaming connection, not a per-tab polling timer.
     expect(requests.some((url) => url.includes('/api/metrics/stream'))).toBe(true)
 
-    // "Live" without a number invites assuming now; CloudWatch publishes on a
-    // period and adds ingestion delay on top.
-    await expect(page.getByText(/behind/).first()).toBeVisible()
+    // Written as a sentence rather than "CloudWatch · 900s · 22m behind":
+    // the reader's question is why it is not current, not what the period is.
+    await expect(page.getByText(/averages — newest is/).first()).toBeVisible()
   })
 
   test('explains an empty chart rather than drawing a flat line', async ({ page }) => {
