@@ -34,7 +34,7 @@ import {
 function describeFlowLogs(
   flowLogs: Array<{ LogDestinationType?: string; LogGroupName?: string; LogDestination?: string; FlowLogStatus?: string }>,
 ): string {
-  if (flowLogs.length === 0) return 'not enabled'
+  if (flowLogs.length === 0) return POSTURE_FACTS.flowLogs.absent
   return flowLogs
     .map((flowLog) => {
       const target =
@@ -45,6 +45,32 @@ function describeFlowLogs(
       return `${flowLog.LogDestinationType ?? 'unknown'}:${target}${status}`
     })
     .join(', ')
+}
+
+/**
+ * HTTP listeners that serve plain text, in `HTTP:80` form, or "none".
+ *
+ * A listener whose default action redirects to HTTPS is excluded: that is how
+ * an ALB serves TLS, and flagging it would bury the listeners that matter.
+ * Returns null when there are no listeners, so nothing is claimed.
+ */
+export function plaintextListenersFact(
+  listeners: Array<{
+    Protocol?: string
+    Port?: number
+    DefaultActions?: Array<{ Type?: string; RedirectConfig?: { Protocol?: string } }>
+  }>,
+): string | null {
+  if (listeners.length === 0) return null
+  const plaintext = listeners.filter(
+    (listener) =>
+      listener.Protocol === 'HTTP' &&
+      !(listener.DefaultActions ?? []).some(
+        (action) => action.Type === 'redirect' && action.RedirectConfig?.Protocol === 'HTTPS',
+      ),
+  )
+  if (plaintext.length === 0) return POSTURE_FACTS.plaintextListeners.none
+  return plaintext.map((listener) => `HTTP:${listener.Port ?? '?'}`).join(', ')
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +145,12 @@ export function buildRegionGraph(
 
   const vpcById = new Map(data.vpcs.map((vpc) => [vpc.VpcId ?? '', vpc]))
 
+  // A denied or failed DescribeFlowLogs leaves the list empty, which is not the
+  // same fact as a VPC with no flow logs — and only the second is a finding.
+  const flowLogsRead =
+    !data.warnings.some((warning) => warning.action === 'ec2:DescribeFlowLogs') &&
+    !data.failures.some((failure) => failure.operation === 'DescribeFlowLogs')
+
   // Flow logs, indexed by the resource they cover.
   const flowLogsByResource = new Map<string, typeof data.flowLogs>()
   for (const flowLog of data.flowLogs) {
@@ -156,9 +188,15 @@ export function buildRegionGraph(
           prop('CIDR', vpc.CidrBlock),
           // Named rather than omitted: flow logs delivered to S3 are still on,
           // and an empty Logs tab would read as "flow logs are disabled".
-          prop('Flow logs', describeFlowLogs(flowLogsByResource.get(vpc.VpcId) ?? [])),
+          prop(
+            POSTURE_FACTS.flowLogs.key,
+            flowLogsRead ? describeFlowLogs(flowLogsByResource.get(vpc.VpcId) ?? []) : undefined,
+          ),
           prop('Tenancy', vpc.InstanceTenancy),
-          prop('Default VPC', vpc.IsDefault ? 'yes' : 'no'),
+          prop(
+            POSTURE_FACTS.defaultVpc.key,
+            vpc.IsDefault ? POSTURE_FACTS.defaultVpc.yes : POSTURE_FACTS.defaultVpc.no,
+          ),
         ]),
       }),
     )
@@ -229,7 +267,12 @@ export function buildRegionGraph(
           prop('Availability zone', subnet.AvailabilityZone),
           prop('Route to internet', isPublic ? '0.0.0.0/0 → internet gateway' : 'via NAT or none'),
           prop('Available IPs', subnet.AvailableIpAddressCount),
-          prop('Auto-assign public IP', subnet.MapPublicIpOnLaunch ? 'enabled' : 'disabled'),
+          prop(
+            POSTURE_FACTS.autoPublicIp.key,
+            subnet.MapPublicIpOnLaunch
+              ? POSTURE_FACTS.autoPublicIp.enabled
+              : POSTURE_FACTS.autoPublicIp.disabled,
+          ),
         ]),
       }),
     )
@@ -351,7 +394,7 @@ export function buildRegionGraph(
           prop('Instance type', instance.InstanceType),
           prop('State', state),
           prop('Private IPv4', instance.PrivateIpAddress),
-          prop('Public IPv4', instance.PublicIpAddress ?? '— (none)'),
+          prop(POSTURE_FACTS.publicIpv4.key, instance.PublicIpAddress ?? POSTURE_FACTS.publicIpv4.none),
           prop('Availability zone', instance.Placement?.AvailabilityZone),
           prop('AMI', instance.ImageId),
           prop('Key pair', instance.KeyName),
@@ -436,12 +479,15 @@ export function buildRegionGraph(
         raw: lb,
         props: props([
           prop('DNS name', lb.DNSName),
-          prop('Scheme', lb.Scheme),
+          prop(POSTURE_FACTS.loadBalancerScheme.key, lb.Scheme),
           prop('Type', lb.Type),
           prop(
             'Listeners',
             listeners.map((l) => `${l.Protocol ?? ''}:${l.Port ?? ''}`).join(', '),
           ),
+          // NLB listeners are TCP/UDP/TLS, and a TCP listener may be carrying
+          // TLS end to end, so only an ALB's HTTP listeners are judged here.
+          isNlb ? null : prop(POSTURE_FACTS.plaintextListeners.key, plaintextListenersFact(listeners)),
           prop('Subnets', subnetIds.join(', ')),
           prop('Availability zones', (lb.AvailabilityZones ?? []).map((az) => az.ZoneName).join(', ')),
           prop('IP address type', lb.IpAddressType),
@@ -486,13 +532,37 @@ export function buildRegionGraph(
           prop('Engine', `${db.Engine ?? ''} ${db.EngineVersion ?? ''}`.trim()),
           prop('Instance class', db.DBInstanceClass),
           prop('Storage', `${db.AllocatedStorage ?? '?'} GiB ${db.StorageType ?? ''}`.trim()),
-          prop('Multi-AZ', db.MultiAZ ? `enabled (${db.SecondaryAvailabilityZone ?? ''})`.trim() : 'disabled'),
+          prop(
+            POSTURE_FACTS.multiAz.key,
+            db.MultiAZ
+              ? `${POSTURE_FACTS.multiAz.enabledPrefix} (${db.SecondaryAvailabilityZone ?? ''})`.replace(' ()', '')
+              : POSTURE_FACTS.multiAz.disabled,
+          ),
           prop('Endpoint', db.Endpoint?.Address),
           prop('Port', db.Endpoint?.Port),
           prop('Availability zone', db.AvailabilityZone),
-          prop('Replica of', db.ReadReplicaSourceDBInstanceIdentifier),
+          prop(POSTURE_FACTS.replicaOf.key, db.ReadReplicaSourceDBInstanceIdentifier),
           prop('Performance Insights', db.PerformanceInsightsEnabled ? 'enabled' : 'disabled'),
-          prop('Log exports', (db.EnabledCloudwatchLogsExports ?? []).join(', ') || 'none'),
+          prop(
+            POSTURE_FACTS.logExports.key,
+            (db.EnabledCloudwatchLogsExports ?? []).join(', ') || POSTURE_FACTS.logExports.none,
+          ),
+          prop(
+            POSTURE_FACTS.backupRetention.key,
+            db.BackupRetentionPeriod === undefined
+              ? undefined
+              : db.BackupRetentionPeriod > 0
+                ? POSTURE_FACTS.backupRetention.days(db.BackupRetentionPeriod)
+                : POSTURE_FACTS.backupRetention.disabled,
+          ),
+          prop(
+            POSTURE_FACTS.deletionProtection.key,
+            db.DeletionProtection === undefined
+              ? undefined
+              : db.DeletionProtection
+                ? POSTURE_FACTS.deletionProtection.on
+                : POSTURE_FACTS.deletionProtection.off,
+          ),
           prop(
             POSTURE_FACTS.storageEncryption.key,
             db.StorageEncrypted
@@ -547,8 +617,18 @@ export function buildRegionGraph(
           prop('Endpoint', cluster.ConfigurationEndpoint?.Address),
           prop('Availability zone', az),
           prop('Replication group', cluster.ReplicationGroupId),
-          prop('Encryption in transit', cluster.TransitEncryptionEnabled ? 'enabled' : 'disabled'),
-          prop('Encryption at rest', cluster.AtRestEncryptionEnabled ? 'enabled' : 'disabled'),
+          prop(
+            POSTURE_FACTS.cacheEncryptionInTransit.key,
+            cluster.TransitEncryptionEnabled
+              ? POSTURE_FACTS.cacheEncryptionInTransit.enabled
+              : POSTURE_FACTS.cacheEncryptionInTransit.disabled,
+          ),
+          prop(
+            POSTURE_FACTS.cacheEncryptionAtRest.key,
+            cluster.AtRestEncryptionEnabled
+              ? POSTURE_FACTS.cacheEncryptionAtRest.enabled
+              : POSTURE_FACTS.cacheEncryptionAtRest.disabled,
+          ),
         ]),
       }),
     )

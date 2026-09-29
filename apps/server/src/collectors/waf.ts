@@ -12,6 +12,7 @@ import {
 import { GLOBAL_REGION } from '../aws/client.js'
 import type { CollectorContext, GlobalScanData, RegionScanData, WafData } from './types.js'
 import { tolerate } from './types.js'
+import { POSTURE_FACTS } from '../graph/posture-facts.js'
 
 /**
  * WAF v2 web ACLs.
@@ -89,7 +90,7 @@ export function describeLoggingDestination(
   config: GetLoggingConfigurationResponse | undefined,
 ): string {
   const destinations = config?.LoggingConfiguration?.LogDestinationConfigs ?? []
-  if (destinations.length === 0) return 'not configured'
+  if (destinations.length === 0) return POSTURE_FACTS.wafLogging.absent
   return destinations
     .map((arn) => {
       if (arn.includes(':logs:')) return `cloudwatch:${arn.split(':log-group:')[1] ?? arn}`

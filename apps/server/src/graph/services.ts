@@ -116,6 +116,8 @@ export function buildRegionalServiceNodes(
   }
 
   for (const url of data.queueUrls) {
+    // Absent means GetQueueAttributes failed, which must not read as "not encrypted".
+    const attributesRead = data.queueAttributes[url] !== undefined
     const attributes = data.queueAttributes[url] ?? {}
     const arn = attributes.QueueArn ?? url
     const name = queueNameFromUrl(url)
@@ -148,7 +150,9 @@ export function buildRegionalServiceNodes(
           prop('Visibility timeout', attributes.VisibilityTimeout ? `${attributes.VisibilityTimeout}s` : undefined),
           prop('Retention', attributes.MessageRetentionPeriod ? `${attributes.MessageRetentionPeriod}s` : undefined),
           // Read by the unencrypted-storage posture detector.
-          prop(POSTURE_FACTS.storageEncryption.key, encrypted ?? POSTURE_FACTS.storageEncryption.absent),
+          attributesRead
+            ? prop(POSTURE_FACTS.storageEncryption.key, encrypted ?? POSTURE_FACTS.storageEncryption.absent)
+            : null,
           prop('Dead-letter queue', redrive ? redriveTarget(redrive) : 'none'),
         ]),
       }),
@@ -262,7 +266,10 @@ export function buildBucketNodes(global: GlobalScanData, region: string): GraphN
               ),
           blocked === undefined
             ? null
-            : prop('Public access', blocked ? 'blocked (all four settings)' : 'NOT fully blocked'),
+            : prop(
+                POSTURE_FACTS.s3PublicAccess.key,
+                blocked ? POSTURE_FACTS.s3PublicAccess.blocked : POSTURE_FACTS.s3PublicAccess.notBlocked,
+              ),
         ]),
       }),
     )
@@ -324,7 +331,7 @@ export function buildGlobalGraph(
           prop('Price class', distribution.PriceClass),
           prop('HTTP version', distribution.HttpVersion),
           prop(
-            'Viewer protocol',
+            POSTURE_FACTS.viewerProtocol.key,
             distribution.DefaultCacheBehavior?.ViewerProtocolPolicy,
           ),
           prop('Web ACL', distribution.WebACLId || 'none'),
@@ -648,7 +655,7 @@ export function buildWebAclNodes(data: WafData, forScope: 'REGIONAL' | 'CLOUDFRO
           prop('Rate limit', rateLimits.join(' · ') || 'none'),
           prop('Associated', protectedArns.length > 0 ? String(protectedArns.length) : isGlobal ? 'CloudFront distributions' : 'none'),
           prop('Capacity', acl?.Capacity ? `${acl.Capacity} WCU` : undefined),
-          prop('Logging', describeLoggingDestination(data.webAclLogging[summary.ARN])),
+          prop(POSTURE_FACTS.wafLogging.key, describeLoggingDestination(data.webAclLogging[summary.ARN])),
         ]),
       }),
     )
