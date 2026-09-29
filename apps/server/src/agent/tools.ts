@@ -2,9 +2,14 @@ import {
   METRIC_CATALOG,
   choosePeriod,
   primaryMetricsFor,
+  frameworkIdSchema,
+  scoreControls,
+  summarizeControls,
   type CloudProvider,
+  type ComplianceResult,
   type GraphNode,
 } from '@cloudatlas/shared'
+import { evaluateCompliance } from '../compliance/evaluate.js'
 
 /**
  * What the agent is allowed to do.
@@ -251,6 +256,69 @@ export const TOOLS: ToolDefinition[] = [
           startedAt: finding.startedAt,
           evidence: finding.evidence,
         })),
+      }
+    },
+  },
+
+  {
+    name: 'get_compliance',
+    description:
+      'Measure the account, or one VPC and the resources it connects to, against HIPAA, SOC 2, ' +
+      'PCI DSS or the AWS Foundational Security Best Practices benchmark (aws-fsbp). Returns the controls with gaps or unreadable facts, the failing resources with ' +
+      'evidence and remediation, and the controls a configuration scan cannot assess. Omit vpcId ' +
+      'for the whole account; pass "outside-vpc" for resources outside any VPC.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        framework: { type: 'string', enum: [...frameworkIdSchema.options] },
+        vpcId: { type: 'string', description: 'A VPC id, "outside-vpc", or omit for the account.' },
+      },
+      required: ['framework'],
+    },
+    run: async (input, context) => {
+      const graph = context.provider.getGraph()
+      if (!graph) return { error: 'No scan has completed yet.' }
+      const parsed = frameworkIdSchema.safeParse(str(input, 'framework'))
+      if (!parsed.success) return { error: `framework must be one of ${frameworkIdSchema.options.join(', ')}.` }
+
+      const report = evaluateCompliance(graph)
+      const scopeId = str(input, 'vpcId') ?? null
+      if (scopeId && !report.scopes.some((scope) => scope.id === scopeId)) {
+        return { error: `No scope ${scopeId}.`, scopes: report.scopes.map((scope) => scope.id) }
+      }
+
+      const checkById = new Map(report.checks.map((check) => [check.id, check]))
+      const nodeName = new Map(graph.nodes.map((node) => [node.id, node.name]))
+      const summaries = summarizeControls(report, parsed.data, scopeId)
+      const describe = (result: ComplianceResult) => ({
+        check: checkById.get(result.checkId)?.title ?? result.checkId,
+        severity: checkById.get(result.checkId)?.severity,
+        nodeId: result.nodeId,
+        name: nodeName.get(result.nodeId),
+        status: result.status,
+        evidence: result.evidence,
+        remediation: result.status === 'fail' ? checkById.get(result.checkId)?.remediation : undefined,
+        // Commands for the user to run; the agent can quote them, never run them.
+        fix: result.fix,
+      })
+
+      return {
+        framework: parsed.data,
+        scope: scopeId ?? 'account',
+        score: scoreControls(summaries),
+        // Met controls are listed by reference only; the gaps are what gets asked about.
+        gaps: summaries
+          .filter((summary) => summary.status === 'gap' || summary.status === 'unknown')
+          .map((summary) => ({
+            control: `${summary.control.ref} ${summary.control.title}`,
+            status: summary.status,
+            coverageNote: summary.control.coverageNote,
+            results: [...summary.failing, ...summary.unknown].map(describe),
+          })),
+        met: summaries.filter((summary) => summary.status === 'met').map((summary) => summary.control.ref),
+        notAssessed: summaries
+          .filter((summary) => summary.status === 'not-assessed')
+          .map((summary) => `${summary.control.ref} ${summary.control.title}: ${summary.control.coverageNote ?? ''}`),
       }
     },
   },

@@ -199,3 +199,26 @@ describe('get_findings and get_recent_changes', () => {
     expect(result.changes[0]?.eventName).toBeTruthy()
   })
 })
+
+describe('get_compliance', () => {
+  it('names the failing resources for one VPC, with a fix, and the controls it cannot assess', async () => {
+    const ctx = await context()
+    const result = (await tool('get_compliance').run({ framework: 'soc2', vpcId: 'vpc-0dd41f' }, ctx)) as {
+      scope: string
+      gaps: Array<{ control: string; results: Array<{ nodeId: string; status: string; remediation?: string }> }>
+      notAssessed: string[]
+    }
+    expect(result.scope).toBe('vpc-0dd41f')
+    const waf = result.gaps.find((gap) => gap.control.startsWith('CC6.6'))
+    expect(waf?.results.some((r) => r.nodeId === 'dr-alb' && r.status === 'fail' && r.remediation)).toBe(true)
+    const withFix = waf?.results.find((r) => r.nodeId === 'dr-alb') as { fix?: { commands: string[] } } | undefined
+    expect(withFix?.fix?.commands.some((c) => c.includes('wafv2 associate-web-acl'))).toBe(true)
+    expect(result.notAssessed.length).toBeGreaterThan(0)
+  })
+
+  it('rejects an unknown framework or scope instead of guessing', async () => {
+    const ctx = await context()
+    expect(await tool('get_compliance').run({ framework: 'iso27001' }, ctx)).toHaveProperty('error')
+    expect(await tool('get_compliance').run({ framework: 'hipaa', vpcId: 'vpc-nope' }, ctx)).toHaveProperty('error')
+  })
+})
