@@ -157,13 +157,13 @@ test.describe('analytics', () => {
 })
 
 test.describe('automatic syncing', () => {
-  test('is on by default at ten minutes', async ({ page }) => {
+  test('is on by default at five minutes', async ({ page }) => {
     const response = await page.request.get('/api/info', {
       headers: { Origin: 'http://127.0.0.1:5173' },
     })
     const info = (await response.json()) as { autoRefreshSeconds: number }
     // Previously defined in the config schema and read by nothing.
-    expect(info.autoRefreshSeconds).toBe(600)
+    expect(info.autoRefreshSeconds).toBe(300)
   })
 })
 

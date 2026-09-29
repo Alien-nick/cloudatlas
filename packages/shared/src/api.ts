@@ -169,8 +169,31 @@ export const configSchema = z.object({
   /** Seconds between health evaluations. */
   healthPollSeconds: z.number().min(10).default(60),
   /** Seconds between automatic re-scans; 0 disables. */
-  /** Re-scan interval. 0 disables it; 600 is ten minutes. */
-  autoRefreshSeconds: z.number().min(0).default(600),
+  /**
+   * Re-scan interval in seconds. 0 disables it.
+   *
+   * A scan is a few hundred calls against a mid-sized account — every bucket
+   * costs four on its own. Those are Describe/List/Get calls, which AWS does
+   * not bill for; the constraint is the per-account request rate limit, not
+   * money. 300 keeps a comfortable margin under it while still surfacing a
+   * new instance within minutes.
+   *
+   * The calls that *are* billed live elsewhere and are paced separately:
+   * CloudWatch GetMetricData is charged per metric requested, which is why
+   * the metric stream polls at the metric's own period rather than on a fixed
+   * timer; Logs Insights is charged by bytes scanned; and Cost Explorer is
+   * charged per request, which is why it is opt-in behind enableCostExplorer.
+   */
+  autoRefreshSeconds: z.number().min(0).default(300),
+  /**
+   * Scans kept per profile.
+   *
+   * Sized against the interval, not picked in isolation: at one scan every
+   * five minutes the previous default of ten held fifty minutes of history,
+   * so syncing more often would have quietly shortened how far back you could
+   * look. 120 is about ten hours at that cadence.
+   */
+  keepScans: z.number().min(1).default(120),
   /** Cost Explorer is billed per request, so it is opt-in. */
   enableCostExplorer: z.boolean().default(false),
   /** Replace account ids with a placeholder before sending to Anthropic. */

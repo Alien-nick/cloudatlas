@@ -9,6 +9,8 @@ export interface ProviderOptions {
   /** From cloudatlas.config.json; Cost Explorer is billed per request. */
   enableCostExplorer?: boolean
   detection?: DetectionConfig
+  /** Scans retained per profile. */
+  keepScans?: number
   healthTtlMs?: number
 }
 
@@ -17,6 +19,7 @@ export function createProvider(kind: 'live' | 'demo', options: ProviderOptions):
   return new LiveProvider({
     db: createDb(defaultDbPath(options.rootDir)),
     enableCostExplorer: options.enableCostExplorer ?? false,
+    ...(options.keepScans ? { keepScans: options.keepScans } : {}),
     ...(options.detection ? { detection: options.detection } : {}),
     ...(options.healthTtlMs ? { healthTtlMs: options.healthTtlMs } : {}),
     ...(options.log ? { log: options.log } : {}),

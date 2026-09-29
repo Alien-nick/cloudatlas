@@ -60,6 +60,7 @@ const provider = createProvider(config.provider, {
   rootDir,
   enableCostExplorer: config.enableCostExplorer,
   detection: config.detection,
+  keepScans: config.keepScans,
   healthTtlMs: config.healthPollSeconds * 1000,
   log: (message, detail) => app.log.info(detail ?? {}, message),
 })
