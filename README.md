@@ -1,11 +1,39 @@
 # CloudAtlas
 
 A local web app that scans an AWS account with your existing CLI credentials and renders a live,
-explorable architecture diagram — with metrics, logs, health detection and a Claude agent for
-troubleshooting.
+explorable architecture diagram — with metrics, logs, health detection, compliance checks and a
+Claude agent for troubleshooting.
 
-Everything runs on your machine. Credentials never reach the browser, and the code never calls a
-mutating AWS API.
+Everything runs on your machine. Credentials are never sent to the browser, and the code never calls
+a mutating AWS API.
+
+---
+
+## What it does
+
+- **Maps the account.** Regions, VPCs, availability zones and subnets render as nested containers
+  holding EC2, ECS, Lambda, load balancers, RDS, ElastiCache, S3, SQS, CloudFront, Route 53, WAF,
+  Network Firewall and IAM roles. Edges show traffic, security-group relationships, event triggers
+  and risky exposure to the internet.
+- **Shows health.** CloudWatch metrics stream live. Findings cover anomalous metric spikes, WAF
+  surges, firing alarms and failed status checks, plus risky configuration: public databases, SSH
+  open to the world, IMDSv1 and unencrypted storage.
+- **Searches logs.** Log group discovery, filter search, Logs Insights and live tail, tied to the
+  resource you are looking at.
+- **Measures compliance.** Every VPC and its resources are checked against HIPAA, SOC 2, PCI DSS and
+  AWS Foundational Security Best Practices — see [Compliance](#compliance).
+- **Answers questions.** A Claude agent with read-only tools answers questions such as "why is the
+  database slow?" or "what is blocking prod-vpc for SOC 2?" from the scanned data.
+- **And the rest:** inventory and analytics views, a full-page view per resource, ⌘K search,
+  diagram export, and a Session Manager terminal launcher for EC2.
+
+Three guarantees hold throughout:
+
+- **Read-only by construction.** The AWS client refuses any operation not in a registry of
+  read-only calls. Even compliance fixes are text for you to run — see [AWS access](#aws-access).
+- **Honest about gaps.** A denied permission or an uncollected fact is shown as missing or unknown,
+  never as healthy or compliant.
+- **Local.** The server binds to `127.0.0.1` and rejects requests from any other origin.
 
 ---
 
@@ -33,10 +61,64 @@ open to the world. It also generates realistic time series with three injected i
 CPU/connection spike, a WAF blocked-request surge and an EC2 status-check failure), so every panel
 has something real to show.
 
-`npm run dev` still defaults to the demo provider (`cloudatlas.config.json` sets it). Switch with
-`npm run dev:live` once you have a profile ready — topology scanning is live as of Milestone 2, but
-metrics, health and logs still return a 501 rather than empty data that would look like a healthy
-account.
+`npm run dev` defaults to the demo provider (`cloudatlas.config.json` sets it). Switch with
+`npm run dev:live` once you have a profile ready; every feature works against a live account.
+
+---
+
+## Compliance
+
+The **Compliance** view measures each VPC — and the resources outside it that its workloads connect
+to, such as the bucket its tasks write to — against the frameworks you choose:
+
+| Framework | What it covers |
+| --------- | -------------- |
+| HIPAA | Security Rule safeguards for ePHI (45 CFR Part 164 Subpart C) |
+| SOC 2 | Trust Services Criteria for security, availability and confidentiality |
+| PCI DSS v4.0.1 | Requirements for systems that handle cardholder data |
+| AWS FSBP | The per-resource benchmark AWS Security Hub scores against (EC2.8, RDS.3, …) |
+
+Pick which apply with **Frameworks** in the view header. The choice is saved per AWS account, and a
+check none of the chosen frameworks require is dropped rather than reported as a gap.
+
+It reads three ways:
+
+- **Controls** — each framework control with its status, gaps first, and the failing resources
+  with their evidence.
+- **Resources** — every resource scored on the checks that apply to it, worst first.
+- **Recommendations** — fixes ranked by severity and by how many resources they fix, each listing
+  the controls it closes across all frameworks.
+
+Every resource also has a **Compliance** tab in the detail panel, and **Export gaps (CSV)** writes
+the gap list with citations, evidence and commands for a ticket or an auditor.
+
+### Copy-paste fixes
+
+Each failing resource comes with AWS CLI commands that fix it, with its identifiers, region and
+profile filled in. **CloudAtlas never runs them** — it has no write access and its client refuses
+any mutating call. You review the commands and run them yourself.
+
+- Disruptive fixes carry a caution: downtime, cost, or who loses access.
+- Where a value only you know is needed (a log bucket, a web ACL), the command keeps a visible
+  `<placeholder>` and is marked as needing input, rather than guessing a value that would run and
+  do the wrong thing.
+- Fixes that cannot be done in place, such as encrypting an existing RDS instance, are given as the
+  documented migration steps. A few, like leaving the default VPC, have no command and say so.
+
+### What the score means
+
+The score is met controls as a share of the controls a scan could decide. It is evidence for an
+assessment, **not an attestation**:
+
+- A fact the scan could not read is **unknown**, never a pass, and counts against the score.
+- Controls a configuration scan cannot see — a BAA with AWS, MFA, CloudTrail, access reviews — are
+  listed as **Manual** and kept out of the percentage, with a note on the evidence needed.
+- Partly assessed controls say what is not covered. Known gaps today: ElastiCache subnet placement,
+  load balancer access logs, TLS policy versions and KMS key rotation are not collected.
+
+The checks live in `apps/server/src/compliance/`. They read the same fact vocabulary as the posture
+detectors (`graph/posture-facts.ts`), so live scans, replayed fixtures and demo mode are evaluated
+by the same code.
 
 ## Capturing a fixture
 
@@ -180,8 +262,9 @@ target. The summary prints the same table.
 | `npm run dev:demo`  | Same, forced onto the fixture provider                   |
 | `npm run dev:live`  | Same, forced onto the real-AWS provider                  |
 | `npm run build`     | Type-checks and builds the web app to `apps/web/dist`    |
+| `npm run e2e`       | Playwright end-to-end tests against demo mode            |
 | `npm run typecheck` | `tsc` across all three workspaces                        |
-| `npm test`          | `check:iam` then the Vitest suite (181 tests)             |
+| `npm test`          | `check:iam` then the Vitest suite                         |
 | `npm run check:iam` | Fail if the registry has unused entries or the policy drifted |
 | `npm run capture`   | Record a redacted AWS fixture (see above)                  |
 | `npm run iam-policy`| Regenerate `docs/iam-policy.json` from the call registry |
@@ -216,7 +299,20 @@ Thresholds and feature flags: default regions, health poll interval, anomaly det
 
 CloudAtlas uses the AWS SDK's default credential chain with a selectable profile, so SSO profiles
 work as-is (`aws sso login --profile <name>` first). Profile **names** are read from `~/.aws/config`
-and `~/.aws/credentials`; access keys are never read, stored or forwarded.
+and `~/.aws/credentials`; CloudAtlas never reads access keys out of them or forwards them.
+
+### No profile on the machine
+
+If no profile exists, the first-run screen asks for an access key ID, secret and (for temporary
+`ASIA…` keys) session token. The local server checks them with `sts:GetCallerIdentity` and, only if
+AWS accepts them, appends them to `~/.aws/credentials` as a named profile (default `cloudatlas`, file
+mode `0600`) with its region in `~/.aws/config` — exactly what `aws configure` would write. From then
+on it is an ordinary profile, so the CLI fix commands and **Connect in terminal** work with it too.
+
+The keys are never sent back to the browser, logged, or stored anywhere else, and an existing
+profile is never overwritten. Use keys for an IAM user with read-only access; `docs/iam-policy.json`
+lists every action CloudAtlas calls. To remove them, delete the profile's section from
+`~/.aws/credentials` and `~/.aws/config`.
 
 Read-only is enforced in one place. `apps/server/src/aws/client.ts` refuses any call that fails
 **either** check: the operation name must read as read-only, **and** it must be registered in
@@ -261,6 +357,9 @@ apps/server/
   aws/               read-only guard, operation registry, capture/replay transcript, redactor
   collectors/        one file per service; pure fetching, no interpretation
   graph/             relationship builders, SG risk analysis, console deep links
+  health/            posture detectors, spike and WAF surge detection
+  compliance/        checks, framework mappings, CLI fix generation
+  agent/             Claude agent loop and its read-only tools
   scan/              per-region orchestration with a concurrency limit
   db/                node:sqlite behind a repository interface
   capture/           the `npm run capture` CLI
@@ -268,7 +367,7 @@ apps/server/
   providers/demo/    fixture provider with the same interface
   routes/            REST + SSE endpoints
 apps/web/
-  stores/            Pinia: app shell, graph + filters, health
+  stores/            Pinia: app shell, graph + filters, health, compliance
   layout/            ELK layered/rectpacking layout, run in a Web Worker
   components/        top bar, sidebar, canvas, detail panel, views
 ```
@@ -328,10 +427,11 @@ edge-free container hierarchy and stacks everything vertically instead.
 | --------- | ------ |
 | 1 · Skeleton + demo mode | **Done** |
 | 2 · Live scan (collectors, SQLite cache, capture tooling) | **Done** |
-| 3 · Metrics + health (uPlot, alarms, spike detection) | Next |
-| 4 · Logs (drawer, live tail, Insights) | Not started |
-| 5 · Claude agent | Not started |
-| 6 · Polish (⌘K, export, IAM doc, Playwright) | Not started |
+| 3 · Metrics + health (uPlot, alarms, spike detection) | **Done** |
+| 4 · Logs (drawer, live tail, Insights) | **Done** |
+| 5 · Claude agent | **Done** |
+| 6 · Polish (⌘K, export, IAM doc, Playwright) | **Done** |
+| Compliance (HIPAA, SOC 2, PCI DSS, AWS FSBP, CLI fixes) | **Done** |
 
 Unbuilt areas say so in the UI rather than rendering empty panels that look like healthy results.
 
