@@ -24,6 +24,8 @@ a mutating AWS API.
   resource you are looking at.
 - **Measures compliance.** Every VPC and its resources are checked against HIPAA, SOC 2, PCI DSS and
   AWS Foundational Security Best Practices — see [Compliance](#compliance).
+- **Breaks down cost.** Actual spend from Cost Explorer, an estimated run-rate per resource and VPC
+  from AWS list prices, and savings with copy-paste fixes — see [Cost](#cost).
 - **Answers questions.** A Claude agent with read-only tools answers questions such as "why is the
   database slow?" or "what is blocking prod-vpc for SOC 2?" from the scanned data.
 - **And the rest:** inventory and analytics views, a full-page view per resource, ⌘K search,
@@ -177,6 +179,33 @@ assessment, **not an attestation**:
 The checks live in `apps/server/src/compliance/`. They read the same fact vocabulary as the posture
 detectors (`graph/posture-facts.ts`), so live scans, replayed fixtures and demo mode are evaluated
 by the same code.
+
+## Cost
+
+The **Cost** view answers where the money goes and how to spend less, in three modes. Two different
+numbers appear, and each mode says which one it shows:
+
+| Mode | Source | What it can tell you |
+| ---- | ------ | -------------------- |
+| **Spend** | AWS Cost Explorer | What was billed: month to date, month-end forecast, last month, 30 days by day, by service and region |
+| **Run-rate** | AWS Price List API | An estimate per resource and VPC: on-demand list price × what is running now |
+| **Savings** | Scan + list prices | Changes that cost less, ranked by estimated monthly saving, with a risk level and AWS CLI commands |
+
+**Spend is the bill; run-rate is an estimate.** Cost Explorer includes every usage charge and
+discount but only groups by service, region and day. The run-rate can say which database costs
+what, but leaves out data transfer, requests and discounts. Usage-based services (Lambda, S3, SQS,
+CloudFront) are listed as not estimated rather than guessed.
+
+**Cost Explorer costs money**, $0.01 per request, so Spend is off until you press *Turn on Cost
+Explorer* (or set `enableCostExplorer`). A refresh is four requests, cached for 12 hours in
+`data/cost.json`, and a manual refresh is limited to once every 10 minutes. The Price List API is
+free.
+
+Savings checks: unattached EBS volumes, storage on stopped instances, gp2 → gp3 (EC2 and RDS),
+previous-generation instance types, Graviton equivalents, load balancers with no targets, extra NAT
+gateways and Multi-AZ databases in resources tagged non-production, and x86 Lambda functions. The
+total counts only the largest saving per resource, so overlapping suggestions never promise money
+twice. As with compliance fixes, CloudAtlas never runs the commands.
 
 ## Capturing a fixture
 
