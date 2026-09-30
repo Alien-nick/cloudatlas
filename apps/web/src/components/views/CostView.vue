@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { Saving } from '@cloudatlas/shared'
 import { useAppStore } from '@/stores/app'
 import { useCostStore, type CostMode } from '@/stores/cost'
 import { useGraphStore } from '@/stores/graph'
-import { RISK, money } from '@/lib/cost'
+import { money } from '@/lib/cost'
 import { nodeColor, relativeTime } from '@/lib/utils'
 import CaEmptyState from '../ui/CaEmptyState.vue'
 import CaTile from '../ui/CaTile.vue'
 import DailySpendChart from '../cost/DailySpendChart.vue'
 import RankBars, { type RankRow } from '../cost/RankBars.vue'
-import FixCommands from '../compliance/FixCommands.vue'
+import CostDetail from '../cost/CostDetail.vue'
+import SavingCard from '../cost/SavingCard.vue'
 
 /**
  * Where the money goes, and how to spend less.
@@ -44,6 +44,17 @@ function open(nodeId: string): void {
   app.detailTab = 'cost'
 }
 
+/** A resource's full page, with its Cost section; Back returns here. */
+function openPage(nodeId: string): void {
+  open(nodeId)
+  app.openResource()
+}
+
+function setMode(next: CostMode): void {
+  cost.detail = null
+  cost.mode = next
+}
+
 // --- spend ---------------------------------------------------------------
 
 // Last month is shown as a figure, not a % change: month to date against a
@@ -54,10 +65,16 @@ const serviceRows = computed<RankRow[]>(() =>
     label: row.key,
     amount: row.monthToDate,
     sub: row.lastMonth > 0 ? `${fmt(row.lastMonth)} last month` : 'nothing last month',
+    onClick: () => cost.openDetail('service', row.key),
   })),
 )
 const regionRows = computed<RankRow[]>(() =>
-  (actual.value?.byRegion ?? []).map((row) => ({ key: row.key, label: row.key, amount: row.amount })),
+  (actual.value?.byRegion ?? []).map((row) => ({
+    key: row.key,
+    label: row.key,
+    amount: row.amount,
+    onClick: () => cost.openDetail('region', row.key),
+  })),
 )
 
 const enabling = ref(false)
@@ -85,6 +102,7 @@ const vpcRows = computed<RankRow[]>(() => {
         key: vpcId || 'outside',
         label: vpcId ? `${vpc ? graph.displayName(vpc) : vpcId}${vpc?.region ? ` · ${vpc.region}` : ''}` : 'Outside any VPC',
         amount,
+        onClick: () => cost.openDetail('vpc', vpcId || 'outside'),
       }
     })
     .sort((a, b) => b.amount - a.amount)
@@ -96,7 +114,9 @@ const typeRows = computed<RankRow[]>(() => {
     const label = graph.nodeById.get(nodeId)?.typeLabel ?? 'Other'
     totals.set(label, (totals.get(label) ?? 0) + amount)
   }
-  return [...totals].map(([key, amount]) => ({ key, label: key, amount })).sort((a, b) => b.amount - a.amount)
+  return [...totals]
+    .map(([key, amount]) => ({ key, label: key, amount, onClick: () => cost.openDetail('type', key) }))
+    .sort((a, b) => b.amount - a.amount)
 })
 
 const resourceRows = computed(() =>
@@ -117,14 +137,6 @@ const showUnpriced = ref(false)
 const savingsShare = computed(() =>
   cost.runRate > 0 ? Math.round((cost.potentialSavings / cost.runRate) * 100) : null,
 )
-
-function fixScript(saving: Saving): string {
-  const fix = saving.fix
-  if (!fix) return ''
-  const header = [`# ${saving.title} — ${nameOf(saving.nodeId)}; review before running, CloudAtlas does not run this`]
-  if (fix.needsInput) header.push('# Replace every <placeholder> with your own value first.')
-  return `${[...header, ...fix.commands].join('\n')}\n`
-}
 </script>
 
 <template>
@@ -137,10 +149,10 @@ function fixScript(saving: Saving): string {
           :key="option.id"
           type="button"
           role="tab"
-          :aria-selected="cost.mode === option.id"
+          :aria-selected="!cost.detail && cost.mode === option.id"
           class="h-[24px] cursor-pointer rounded-[5px] px-[10px] text-[11.5px] transition-colors"
-          :class="cost.mode === option.id ? 'bg-raise font-semibold text-text' : 'text-muted hover:text-text'"
-          @click="cost.mode = option.id"
+          :class="!cost.detail && cost.mode === option.id ? 'bg-raise font-semibold text-text' : 'text-muted hover:text-text'"
+          @click="setMode(option.id)"
         >
           {{ option.label }}
           <span v-if="option.id === 'savings' && cost.report?.savings.length" class="ml-[3px] font-mono text-[10.5px] text-ok">{{
@@ -161,8 +173,10 @@ function fixScript(saving: Saving): string {
 
     <div v-else class="min-h-0 flex-1 overflow-y-auto">
       <div class="mx-auto w-full max-w-[1180px] px-6 py-5">
+        <CostDetail v-if="cost.detail" />
+
         <!-- ============================== Spend ============================== -->
-        <template v-if="cost.mode === 'spend'">
+        <template v-else-if="cost.mode === 'spend'">
           <div
             v-if="actual?.status === 'demo'"
             class="mb-4 rounded-[9px] border border-border bg-panel px-[12px] py-[9px] text-[11.5px] text-muted"
@@ -292,7 +306,8 @@ function fixScript(saving: Saving): string {
                 <button
                   type="button"
                   class="flex w-full cursor-pointer items-start gap-[10px] py-[8px] text-left hover:bg-raise/40"
-                  @click="open(row.nodeId)"
+                  title="Open the resource's full page"
+                  @click="openPage(row.nodeId)"
                 >
                   <CaTile
                     v-if="row.node"
@@ -369,62 +384,13 @@ function fixScript(saving: Saving): string {
           />
 
           <ol class="flex flex-col gap-[10px]">
-            <li
+            <SavingCard
               v-for="(saving, index) in cost.report.savings"
               :key="saving.id"
-              class="rounded-[10px] border border-border bg-panel p-[14px]"
-            >
-              <div class="flex items-start gap-[11px]">
-                <span class="mt-[1px] font-mono text-[12px] font-semibold text-faint">{{ index + 1 }}</span>
-                <div class="min-w-0 flex-1">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-[13px] font-semibold">{{ saving.title }}</span>
-                    <span
-                      class="flex items-center gap-[4px] rounded-full border border-border2 px-[7px] text-[10.5px]"
-                      :style="{ color: RISK[saving.risk].color }"
-                    >
-                      <span class="text-[8px]">{{ RISK[saving.risk].glyph }}</span>{{ RISK[saving.risk].label }}
-                    </span>
-                    <span class="ml-auto font-mono text-[13px] font-semibold text-ok">
-                      {{ saving.monthlySavingsUsd === null ? '' : `${money(saving.monthlySavingsUsd)}/mo` }}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    class="mt-[6px] flex cursor-pointer items-center gap-[7px] text-left hover:underline"
-                    @click="open(saving.nodeId)"
-                  >
-                    <CaTile
-                      v-if="graph.nodeById.get(saving.nodeId)"
-                      :abbr="graph.nodeById.get(saving.nodeId)!.abbr"
-                      :color="nodeColor(graph.nodeById.get(saving.nodeId)!)"
-                      :node-type="graph.nodeById.get(saving.nodeId)!.type"
-                      :size="18"
-                      :radius="4"
-                    />
-                    <span class="text-[12px] text-text">{{ nameOf(saving.nodeId) }}</span>
-                  </button>
-                  <p v-if="saving.savingsNote" class="mt-[5px] text-[11.5px] text-muted">
-                    <span class="font-semibold text-text">Saving:</span> {{ saving.savingsNote }}
-                  </p>
-                  <p class="mt-[5px] text-[12px] leading-[1.55] text-muted">{{ saving.rationale }}</p>
-                  <ul class="mt-[6px] flex flex-col gap-[2px]">
-                    <li v-for="(line, i) in saving.evidence" :key="i" class="font-mono text-[10.5px] text-faint">· {{ line }}</li>
-                  </ul>
-                  <FixCommands
-                    v-if="saving.fix && saving.fix.commands.length > 0"
-                    class="mt-[9px]"
-                    :script="fixScript(saving)"
-                    :caution="saving.fix.caution"
-                    :needs-input="saving.fix.needsInput"
-                  />
-                  <p v-else class="mt-[8px] text-[11.5px] text-muted">
-                    <span class="font-semibold text-text">No single command does this safely.</span>
-                    It needs a rebuild or a migration rather than a setting change.
-                  </p>
-                </div>
-              </div>
-            </li>
+              :saving="saving"
+              :rank="index + 1"
+              @open="openPage"
+            />
           </ol>
         </template>
       </div>

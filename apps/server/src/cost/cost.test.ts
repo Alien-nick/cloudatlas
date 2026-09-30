@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { savingsTotal, type ActualSpend, type Graph, type GraphNode, type Saving } from '@cloudatlas/shared'
+import { costServiceOf, nodeTypesForService, savingsTotal, type ActualSpend, type Graph, type GraphNode, type Saving } from '@cloudatlas/shared'
 import type { AwsClient } from '../aws/client.js'
 import { emptyRegionScanData } from '../collectors/types.js'
 import { buildRegionGraph, registeredTargetCount } from '../graph/build.js'
@@ -351,7 +351,9 @@ describe('Cost Explorer', () => {
     const groups = (service: string, amount: string) => ({ Keys: [service], Metrics: { UnblendedCost: { Amount: amount, Unit: 'USD' } } })
     const send = vi.fn(async (_service: string, _region: string, operation: string, command: { input: Record<string, unknown> }) => {
       if (operation === 'GetCostForecast') return { Total: { Amount: '90' } }
-      if (command.input.Granularity === 'DAILY') return { ResultsByTime: [{ TimePeriod: { Start: '2026-09-14' }, Total: { UnblendedCost: { Amount: '3.5' } } }] }
+      if (command.input.Granularity === 'DAILY') {
+        return { ResultsByTime: [{ TimePeriod: { Start: '2026-09-14' }, Groups: [groups('Amazon RDS', '3'), groups('AWS Lambda', '0.5')] }] }
+      }
       const groupBy = (command.input.GroupBy as Array<{ Key: string }>)[0]?.Key
       if (groupBy === 'REGION') return { ResultsByTime: [{ TimePeriod: { Start: '2026-09-01' }, Groups: [groups('us-east-1', '60')] }] }
       return {
@@ -365,6 +367,10 @@ describe('Cost Explorer', () => {
     expect(spend).toMatchObject({ status: 'ok', monthToDate: 60, lastMonth: 100, forecastMonthEnd: 150 })
     expect(spend.byService[0]).toEqual({ key: 'Amazon RDS', monthToDate: 50, lastMonth: 100 })
     expect(spend.daily).toEqual([{ key: '2026-09-14', amount: 3.5 }])
+    expect(spend.dailyByService).toEqual([
+      { key: 'Amazon RDS', amounts: [3] },
+      { key: 'AWS Lambda', amounts: [0.5] },
+    ])
   })
 
   it('reports a denied call as denied', async () => {
@@ -387,6 +393,20 @@ describe('Cost Explorer', () => {
       { TimePeriod: { Start: '2026-09-01', End: '2026-09-16' }, Groups: [{ Keys: ['a'], Metrics: { UnblendedCost: { Amount: '2' } } }] },
     ]
     expect(sumGroups(results, (start) => start >= '2026-09-01').get('a')).toBe(2)
+  })
+})
+
+describe('the Cost Explorer service a cost line bills under', () => {
+  it('splits an instance into compute and its volumes, as the bill does', () => {
+    expect(costServiceOf('ec2', 'Instance (m6i.xlarge)')).toBe('Amazon Elastic Compute Cloud - Compute')
+    expect(costServiceOf('ec2', 'Volume vol-1 (gp2)')).toBe('EC2 - Other')
+    expect(costServiceOf('nat-gateway')).toBe('EC2 - Other')
+    expect(costServiceOf('iam-role')).toBeNull()
+  })
+
+  it('lists instances under both EC2 services, since they bill under both', () => {
+    expect(nodeTypesForService('EC2 - Other')).toEqual(expect.arrayContaining(['ebs-volume', 'nat-gateway', 'ec2']))
+    expect(nodeTypesForService('Amazon Relational Database Service')).toEqual(['rds', 'rds-cluster'])
   })
 })
 

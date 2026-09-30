@@ -6,6 +6,14 @@ import { useGraphStore } from './graph'
 
 export type CostMode = 'spend' | 'run-rate' | 'savings'
 
+/** What a drill-down page is about. `key` is a service name, region, VPC id or type label. */
+export interface CostDetail {
+  kind: 'service' | 'region' | 'vpc' | 'type'
+  key: string
+  /** The mode it was opened from, so Back returns there. */
+  from: CostMode
+}
+
 export const useCostStore = defineStore('cost', () => {
   const graph = useGraphStore()
 
@@ -14,6 +22,16 @@ export const useCostStore = defineStore('cost', () => {
   const refreshing = ref(false)
   const error = ref<string | null>(null)
   const mode = ref<CostMode>('spend')
+  const detail = ref<CostDetail | null>(null)
+
+  function openDetail(kind: CostDetail['kind'], key: string): void {
+    detail.value = { kind, key, from: mode.value }
+  }
+
+  function closeDetail(): void {
+    if (detail.value) mode.value = detail.value.from
+    detail.value = null
+  }
 
   const byNode = computed(() => (report.value ? monthlyByNode(report.value.runRate) : new Map<string, number>()))
   const runRate = computed(() => (report.value ? runRateTotal(report.value.runRate) : 0))
@@ -60,6 +78,9 @@ export const useCostStore = defineStore('cost', () => {
     refreshing,
     error,
     mode,
+    detail,
+    openDetail,
+    closeDetail,
     byNode,
     runRate,
     potentialSavings,

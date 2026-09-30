@@ -103,6 +103,32 @@ async function costAndUsage(aws: AwsClient, input: GetCostAndUsageCommandInput):
 
 const rounded = (value: number): number => Math.round(value * 100) / 100
 
+/**
+ * Days of per-service groups into daily totals plus one aligned series per
+ * service. A day with no groups (nothing billed yet) is a zero, not a gap.
+ */
+export function splitDaily(results: ResultByTime[]): {
+  daily: ActualSpend['daily']
+  dailyByService: NonNullable<ActualSpend['dailyByService']>
+} {
+  const days = results.map((period) => period.TimePeriod?.Start ?? '')
+  const series = new Map<string, number[]>()
+  results.forEach((period, index) => {
+    for (const group of period.Groups ?? []) {
+      const key = group.Keys?.[0]
+      if (!key) continue
+      const amounts = series.get(key) ?? new Array<number>(days.length).fill(0)
+      amounts[index] = rounded((amounts[index] ?? 0) + amountOf(group.Metrics?.UnblendedCost))
+      series.set(key, amounts)
+    }
+  })
+  const daily = days.map((key, index) => ({
+    key,
+    amount: rounded([...series.values()].reduce((sum, amounts) => sum + (amounts[index] ?? 0), 0)),
+  }))
+  return { daily, dailyByService: [...series].map(([key, amounts]) => ({ key, amounts })) }
+}
+
 export async function fetchActualSpend(aws: AwsClient, now = new Date()): Promise<ActualSpend> {
   const w = spendWindows(now)
   const metric = { Metrics: ['UnblendedCost'] }
@@ -117,11 +143,15 @@ export async function fetchActualSpend(aws: AwsClient, now = new Date()): Promis
     const thisMonth = sumGroups(byServiceResults, (start) => start >= w.monthStart)
     const lastMonth = sumGroups(byServiceResults, (start) => start < w.monthStart)
 
+    // Grouped by service, so a service's own trend is in the same single
+    // request; the daily total is the sum of its groups.
     const dailyResults = await costAndUsage(aws, {
       TimePeriod: { Start: w.thirtyDaysAgo, End: w.tomorrow },
       Granularity: 'DAILY',
       ...metric,
+      GroupBy: [{ Type: 'DIMENSION', Key: 'SERVICE' }],
     })
+    const { daily, dailyByService } = splitDaily(dailyResults)
     const byRegion = sumGroups(
       await costAndUsage(aws, {
         TimePeriod: { Start: w.monthStart, End: w.tomorrow },
@@ -174,10 +204,8 @@ export async function fetchActualSpend(aws: AwsClient, now = new Date()): Promis
         .map(([key, amount]) => ({ key, amount: rounded(amount) }))
         .filter((entry) => entry.amount > 0.004)
         .sort((a, b) => b.amount - a.amount),
-      daily: dailyResults.map((period) => ({
-        key: period.TimePeriod?.Start ?? '',
-        amount: rounded(amountOf(period.Total?.UnblendedCost)),
-      })),
+      daily,
+      dailyByService,
     }
   } catch (error) {
     const err = error as Error & { name: string }

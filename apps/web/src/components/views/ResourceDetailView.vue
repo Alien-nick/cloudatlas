@@ -17,6 +17,8 @@ import ConnectionsTab from '../detail/ConnectionsTab.vue'
 import SecurityTab from '../detail/SecurityTab.vue'
 import TagsTab from '../detail/TagsTab.vue'
 import JsonTab from '../detail/JsonTab.vue'
+import CostTab from '../detail/CostTab.vue'
+import ComplianceTab from '../detail/ComplianceTab.vue'
 
 /**
  * One resource, on a page of its own.
@@ -195,6 +197,16 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
         <section class="ca-detail-card">
           <h2 class="ca-detail-heading">Security</h2>
           <SecurityTab :node="node" />
+        </section>
+
+        <section class="ca-detail-card">
+          <h2 class="ca-detail-heading">Cost</h2>
+          <CostTab :node="node" />
+        </section>
+
+        <section class="ca-detail-card">
+          <h2 class="ca-detail-heading">Compliance</h2>
+          <ComplianceTab :node="node" />
         </section>
 
         <section class="ca-detail-card">

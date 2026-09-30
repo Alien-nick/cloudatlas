@@ -191,6 +191,11 @@ numbers appear, and each mode says which one it shows:
 | **Run-rate** | AWS Price List API | An estimate per resource and VPC: on-demand list price × what is running now |
 | **Savings** | Scan + list prices | Changes that cost less, ranked by estimated monthly saving, with a risk level and AWS CLI commands |
 
+Every service, region, VPC and resource type opens a drill-down: the billed figures where Cost
+Explorer has them (with a service's own 30-day trend), the estimate for the resources the scan can
+see, the savings found among them, and general ways to save on that service — labelled apart from
+the findings. Resources open their full page, which now carries Cost and Compliance sections.
+
 **Spend is the bill; run-rate is an estimate.** Cost Explorer includes every usage charge and
 discount but only groups by service, region and day. The run-rate can say which database costs
 what, but leaves out data transfer, requests and discounts. Usage-based services (Lambda, S3, SQS,

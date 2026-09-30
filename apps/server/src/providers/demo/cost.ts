@@ -120,5 +120,10 @@ export function demoActualSpend(runRateMonthly: number, now = new Date()): Actua
       { key: 'eu-west-1', amount: round(total * elapsed * 0.02) },
     ],
     daily,
+    // Each service follows the account's daily shape at its share of the total.
+    dailyByService: monthly.map(([key, value]) => ({
+      key,
+      amounts: daily.map((day) => round(day.amount * (value / total))),
+    })),
   }
 }

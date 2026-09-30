@@ -52,6 +52,11 @@ export const actualSpendSchema = z.object({
   byRegion: z.array(amountByKeySchema),
   /** Last 30 days, oldest first; `key` is YYYY-MM-DD. */
   daily: z.array(amountByKeySchema),
+  /**
+   * The same days per service, aligned with `daily`. Optional because figures
+   * cached before it existed do not have it.
+   */
+  dailyByService: z.array(z.object({ key: z.string(), amounts: z.array(z.number()) })).optional(),
 })
 export type ActualSpend = z.infer<typeof actualSpendSchema>
 
@@ -118,6 +123,50 @@ export const costReportSchema = z.object({
   scannedAt: z.number(),
 })
 export type CostReport = z.infer<typeof costReportSchema>
+
+// ---------------------------------------------------------------------------
+// Cost Explorer services
+// ---------------------------------------------------------------------------
+
+/**
+ * The Cost Explorer service a resource's cost line is billed under.
+ *
+ * By line rather than by resource, because one resource can bill under two
+ * services: an EC2 instance's compute is "EC2 - Compute", but its volumes —
+ * like NAT gateways — are "EC2 - Other".
+ */
+export function costServiceOf(nodeType: string, component = ''): string | null {
+  if (nodeType === 'ec2') return component.startsWith('Volume') ? 'EC2 - Other' : 'Amazon Elastic Compute Cloud - Compute'
+  return COST_SERVICE_BY_TYPE[nodeType] ?? null
+}
+
+const COST_SERVICE_BY_TYPE: Record<string, string> = {
+  'ebs-volume': 'EC2 - Other',
+  'nat-gateway': 'EC2 - Other',
+  rds: 'Amazon Relational Database Service',
+  'rds-cluster': 'Amazon Relational Database Service',
+  elasticache: 'Amazon ElastiCache',
+  alb: 'Amazon Elastic Load Balancing',
+  nlb: 'Amazon Elastic Load Balancing',
+  'ecs-task': 'Amazon Elastic Container Service',
+  'ecs-service': 'Amazon Elastic Container Service',
+  lambda: 'AWS Lambda',
+  s3: 'Amazon Simple Storage Service',
+  cloudfront: 'Amazon CloudFront',
+  sqs: 'Amazon Simple Queue Service',
+  'route53-zone': 'Amazon Route 53',
+  'waf-web-acl': 'AWS WAF',
+  'network-firewall': 'AWS Network Firewall',
+}
+
+/** Node types that can bill under a service, for "which of my resources is this?". */
+export function nodeTypesForService(service: string): string[] {
+  const types = Object.entries(COST_SERVICE_BY_TYPE)
+    .filter(([, name]) => name === service)
+    .map(([type]) => type)
+  if (service === 'Amazon Elastic Compute Cloud - Compute' || service === 'EC2 - Other') types.push('ec2')
+  return types
+}
 
 // ---------------------------------------------------------------------------
 // Roll-ups, shared so the UI and the agent agree
