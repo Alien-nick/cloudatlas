@@ -15,6 +15,7 @@ import {
   loadPriceBook,
   parseProduct,
   priceKeyId,
+  priceListText,
   queryFor,
   rdsEngineName,
   selectPrice,
@@ -80,6 +81,15 @@ describe('price list parsing', () => {
       product: { attributes },
       terms: { OnDemand: { t: { priceDimensions: { d: { unit, pricePerUnit: { USD: usd } } } } } },
     })
+
+  it('reads entries in every shape the SDK returns them', () => {
+    const json = product('Hrs', '0.0416')
+    // Current SDKs hand back a wrapper whose toString() is the JSON.
+    const wrapper = new (class LazyJson { constructor(private readonly text: string) {} toString() { return this.text } })(json)
+    for (const entry of [json, wrapper, JSON.parse(json), JSON.stringify(json)]) {
+      expect(parseProduct(priceListText(entry))?.prices, typeof entry).toEqual([{ unit: 'Hrs', usd: 0.0416 }])
+    }
+  })
 
   it('reads the on-demand price and unit', () => {
     expect(parseProduct(product('Hrs', '0.1920000000'))?.prices).toEqual([{ unit: 'Hrs', usd: 0.192 }])

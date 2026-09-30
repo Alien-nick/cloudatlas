@@ -12,10 +12,13 @@ const graph = useGraphStore()
 const props = defineProps<{ data: ResourceNodeData }>()
 
 const color = computed(() => nodeColor(props.data.node))
-const isStopped = computed(() => !['running', 'available', 'active', 'deployed', 'ready', 'in-use'].includes(props.data.node.state))
+// "planned" is a simulated resource: not running yet, but not stopped either.
+const isStopped = computed(() => !['running', 'available', 'active', 'deployed', 'ready', 'in-use', 'planned'].includes(props.data.node.state))
 
 const ring = computed(() => {
   if (props.data.selected) return color.value
+  if (props.data.simStatus === 'added') return 'var(--ca-ok)'
+  if (props.data.simStatus === 'changed') return 'var(--ca-warn)'
   if (props.data.worstSeverity === 'critical') return 'var(--ca-bad)'
   if (props.data.worstSeverity === 'warning') return 'var(--ca-warn)'
   return null
@@ -58,6 +61,17 @@ const HANDLES = [
         :title="`${data.findingCount} open finding${data.findingCount === 1 ? '' : 's'}`"
       >
         {{ badgeLabel }}
+      </div>
+      <div
+        v-if="data.simStatus"
+        class="absolute -top-[7px] -left-[12px] rounded-full border px-[5px] py-[1px] text-[8.5px] font-bold tracking-wide"
+        :style="{
+          color: data.simStatus === 'added' ? 'var(--ca-ok)' : 'var(--ca-warn)',
+          borderColor: data.simStatus === 'added' ? 'var(--ca-ok)' : 'var(--ca-warn)',
+          background: 'var(--ca-panel)',
+        }"
+      >
+        {{ data.simStatus === 'added' ? 'NEW' : 'EDITED' }}
       </div>
     </div>
 

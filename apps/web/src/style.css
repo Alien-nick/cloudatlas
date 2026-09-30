@@ -290,3 +290,78 @@
 .vue-flow__attribution {
   display: none;
 }
+
+/* Simulation canvas: where a dragged resource may and will land, what was
+   just added, and the dot to drag from to connect two resources. */
+.vue-flow__node.ca-sim-droppable > * {
+  outline: 1px dashed color-mix(in srgb, var(--ca-text) 45%, transparent);
+  outline-offset: 2px;
+  transition: outline-color 0.15s ease, background-color 0.15s ease;
+}
+.vue-flow__node.ca-sim-drop > * {
+  outline: 2px solid var(--ca-ok);
+  outline-offset: 2px;
+  background-color: color-mix(in srgb, var(--ca-ok) 9%, transparent);
+}
+.vue-flow__node.ca-sim-selected > * {
+  outline: 2px solid var(--ca-text);
+  outline-offset: 2px;
+}
+.vue-flow__node.ca-sim-pulse > * {
+  animation: ca-sim-pulse 0.9s ease-out 3;
+  border-radius: 10px;
+}
+.vue-flow__node.ca-sim-enter > * {
+  animation: ca-sim-enter 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.vue-flow__node.ca-sim-connect-from > *,
+.vue-flow__node.ca-sim-connect-to > * {
+  outline: 2px solid var(--ca-ok);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+.ca-sim-connecting .vue-flow__node {
+  cursor: crosshair;
+}
+@keyframes ca-sim-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ca-ok) 70%, transparent); }
+  100% { box-shadow: 0 0 0 16px transparent; }
+}
+@keyframes ca-sim-enter {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Only here are handles real: a dot on the right of a hovered tile. */
+.ca-sim-canvas .vue-flow__node-resource .vue-flow__handle-right.source {
+  pointer-events: auto;
+  width: 12px;
+  height: 12px;
+  right: -6px;
+  border-radius: 999px;
+  border: 2px solid var(--ca-panel);
+  background: var(--ca-ok);
+  cursor: crosshair;
+  opacity: 0;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.ca-sim-canvas .vue-flow__node-resource:hover .vue-flow__handle-right.source {
+  opacity: 1;
+}
+.ca-sim-canvas .vue-flow__node-resource .vue-flow__handle-right.source:hover {
+  transform: translate(0, -50%) scale(1.3);
+}
+.ca-sim-canvas .vue-flow__connection-path {
+  stroke: var(--ca-ok);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+
+.ca-fade-enter-active,
+.ca-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+.ca-fade-enter-from,
+.ca-fade-leave-to {
+  opacity: 0;
+}

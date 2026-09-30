@@ -34,9 +34,14 @@ export function priceKeyId(key: PriceKey): string {
   return Object.values(key).map(String).join('|')
 }
 
-/** The unit each kind is priced in, as the Price List API names it. */
-export function unitOf(key: PriceKey): 'Hrs' | 'GB-Mo' {
-  return key.kind === 'ebs' || key.kind === 'rds-storage' ? 'GB-Mo' : 'Hrs'
+/**
+ * The unit each kind is priced in, as the Price List API names it — which is
+ * not consistent across services: Fargate says "hours" where EC2 says "Hrs".
+ */
+export function unitOf(key: PriceKey): 'Hrs' | 'GB-Mo' | 'hours' {
+  if (key.kind === 'ebs' || key.kind === 'rds-storage') return 'GB-Mo'
+  if (key.kind === 'fargate-vcpu' || key.kind === 'fargate-gb') return 'hours'
+  return 'Hrs'
 }
 
 // ---------------------------------------------------------------------------
@@ -126,9 +131,11 @@ export function queryFor(key: PriceKey): Query | null {
     case 'fargate-vcpu':
     case 'fargate-gb': {
       const usage = key.kind === 'fargate-vcpu' ? 'Fargate-vCPU-Hours:perCPU' : 'Fargate-GB-Hours'
+      // Fargate rows carry no product family, and ECS lists hundreds of rows
+      // per region; cputype/memorytype narrow it to the four variants.
       return {
         serviceCode: 'AmazonECS',
-        filters: { ...region, productFamily: 'Compute' },
+        filters: key.kind === 'fargate-vcpu' ? { ...region, cputype: 'perCPU' } : { ...region, memorytype: 'perGB' },
         // Linux on x86, on demand: the usage type ends in exactly this, while
         // the ARM, Windows and Spot variants carry extra qualifiers.
         pick: (attributes) => (attributes.usagetype ?? '').endsWith(`-${usage}`) || attributes.usagetype === usage,
@@ -142,6 +149,24 @@ interface Product {
   prices: Array<{ unit: string; usd: number }>
 }
 
+/**
+ * The JSON text of a Price List entry, whatever shape the SDK hands it over in.
+ *
+ * Declared as a string, but current SDK versions return a lazily parsed
+ * wrapper object whose `toString()` is the JSON. `JSON.stringify` on that
+ * wrapper yields a *quoted string*, which parses to a string with no product
+ * in it — every resource then priced as "not found". Tests that fed plain
+ * strings passed throughout; a live account was the first to show it.
+ */
+export function priceListText(entry: unknown): string {
+  if (typeof entry === 'string') return entry
+  if (entry !== null && typeof entry === 'object') {
+    const text = String(entry)
+    if (text !== '[object Object]') return text
+  }
+  return JSON.stringify(entry)
+}
+
 /** One Price List entry: attributes plus every on-demand price dimension. */
 export function parseProduct(json: string): Product | null {
   let parsed: {
@@ -150,6 +175,8 @@ export function parseProduct(json: string): Product | null {
   }
   try {
     parsed = JSON.parse(json)
+    // A doubly encoded entry — JSON text inside a JSON string — is unwrapped once.
+    if (typeof parsed === 'string') parsed = JSON.parse(parsed)
   } catch {
     return null
   }
@@ -245,7 +272,7 @@ async function getProducts(aws: AwsClient, query: Query): Promise<Product[]> {
       }),
     )
     for (const json of output.PriceList ?? []) {
-      const product = parseProduct(typeof json === 'string' ? json : JSON.stringify(json))
+      const product = parseProduct(priceListText(json))
       if (product) products.push(product)
     }
     token = output.NextToken

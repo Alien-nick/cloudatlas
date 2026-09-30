@@ -5,6 +5,12 @@ import type {
   AlarmsResponse,
   ComplianceReport,
   CostReport,
+  SimChange,
+  Simulated,
+  SimulationScope,
+  SimulationExport,
+  SimulationImpact,
+  SimulationSummary,
   FindingsResponse,
   Graph,
   Identity,
@@ -107,6 +113,17 @@ export const api = {
   /** Null until the first scan completes. `refresh` re-reads Cost Explorer, which is billed. */
   cost: (refresh = false) => request<CostReport | null>(`/api/cost${refresh ? '?refresh=1' : ''}`),
   setCostExplorer: (enabled: boolean) => post<{ enabled: boolean }>('/api/cost/explorer', { enabled }),
+
+  simulations: () => request<SimulationSummary[]>('/api/simulations'),
+  createSimulation: (name: string, scope: SimulationScope | null) => post<Simulated>('/api/simulations', { name, scope }),
+  simulation: (id: string) => request<Simulated>(`/api/simulations/${encodeURIComponent(id)}`),
+  saveSimulation: (id: string, patch: { name?: string; changes?: SimChange[] }) =>
+    request<Simulated>(`/api/simulations/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  deleteSimulation: (id: string) => request<null>(`/api/simulations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  rebaseSimulation: (id: string) => post<Simulated>(`/api/simulations/${encodeURIComponent(id)}/rebase`, {}),
+  simulationImpact: (id: string) => request<SimulationImpact>(`/api/simulations/${encodeURIComponent(id)}/impact`),
+  exportSimulation: (id: string, format: 'cli' | 'terraform') =>
+    request<SimulationExport>(`/api/simulations/${encodeURIComponent(id)}/export?format=${format}`),
   alarms: (state?: string) =>
     request<AlarmsResponse>(`/api/alarms${state ? `?state=${encodeURIComponent(state)}` : ''}`),
   alarmHistory: (name: string, region: string) =>

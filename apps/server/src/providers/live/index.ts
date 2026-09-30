@@ -23,6 +23,7 @@ import type {
   WafSampledRequestsRequest,
   WafSampledResponse,
   CostReport,
+  RunRate,
 } from '@cloudatlas/shared'
 import { choosePeriod, metricsFor, primaryMetricsFor } from '@cloudatlas/shared'
 import { AwsClient } from '../../aws/client.js'
@@ -44,6 +45,7 @@ import { lookupChanges } from '../../changes/cloudtrail.js'
 import { getActualSpend, setCostExplorerEnabled } from '../../cost/actual.js'
 import { loadPriceBook } from '../../cost/pricing.js'
 import { planCostReport } from '../../cost/report.js'
+import { estimateRunRate, neededPrices } from '../../cost/estimate.js'
 
 export class UnknownNodeError extends Error {
   readonly statusCode = 404
@@ -442,6 +444,13 @@ export class LiveProvider implements CloudProvider {
       }),
     ])
     return plan.build(prices.book, prices.failure, actual)
+  }
+
+  async estimateRunRates(graphs: Graph[]): Promise<RunRate[]> {
+    const profile = graphs[0]?.profile ?? this.getGraph()?.profile
+    const aws = this.client(this.profileOrThrow(profile))
+    const { book, failure } = await loadPriceBook(aws, graphs.flatMap((graph) => neededPrices(graph)))
+    return graphs.map((graph) => estimateRunRate(graph, book, failure))
   }
 
   async setCostExplorerEnabled(enabled: boolean): Promise<void> {

@@ -74,6 +74,8 @@ export interface DecorateOptions {
   highlightedIds: Set<string> | null
   showEdgeLabels: boolean
   securityView: boolean
+  /** A simulation's added and changed resources, tagged on their tiles. */
+  simStatus?: Record<string, 'added' | 'changed'>
 }
 
 const EDGE_COLORS: Record<GraphEdge['kind'], string> = {
@@ -258,6 +260,7 @@ export function decorate(
             selected: options.selectedId === node.id,
             findingCount: findings.length,
             worstSeverity: worstSeverity(findings),
+            simStatus: options.simStatus?.[node.id] ?? null,
           }
 
     const hasParent = node.parentId !== null && !layout.hidden.has(node.parentId)

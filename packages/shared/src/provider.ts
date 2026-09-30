@@ -1,5 +1,5 @@
 import type { Alarm, CollectorFailure, Finding, Graph, MissingPermission } from './graph.js'
-import type { CostReport } from './cost.js'
+import type { CostReport, RunRate } from './cost.js'
 import type { DatabaseLoad, MetricsRequest, MetricsResponse } from './metrics.js'
 import type {
   InsightsRequest,
@@ -86,6 +86,8 @@ export interface CloudProvider {
   getCostReport(options?: { refresh?: boolean }): Promise<CostReport | null>
   /** Cost Explorer bills per request, so turning it on is the user's call. */
   setCostExplorerEnabled(enabled: boolean): Promise<void>
+  /** Estimated run-rate for each graph, priced together — used to compare a simulation with its snapshot. */
+  estimateRunRates(graphs: Graph[]): Promise<RunRate[]>
 
   dispose?(): Promise<void>
 }

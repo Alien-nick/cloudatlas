@@ -16,6 +16,7 @@ import InventoryView from '@/components/views/InventoryView.vue'
 import AnalyticsView from '@/components/views/AnalyticsView.vue'
 import ComplianceView from '@/components/views/ComplianceView.vue'
 import CostView from '@/components/views/CostView.vue'
+import SimulateView from '@/components/views/SimulateView.vue'
 import LogsView from '@/components/views/LogsView.vue'
 import ResourceDetailView from '@/components/views/ResourceDetailView.vue'
 
@@ -144,11 +145,12 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
         <AnalyticsView v-else-if="app.view === 'analytics'" />
         <ComplianceView v-else-if="app.view === 'compliance'" />
         <CostView v-else-if="app.view === 'cost'" />
+        <SimulateView v-else-if="app.view === 'simulate'" />
         <ResourceDetailView v-else-if="app.view === 'resource'" />
       </main>
 
       <DetailPanel
-        v-if="!showFirstRun && graph.graph && app.panelOpen && app.view !== 'resource'"
+        v-if="!showFirstRun && graph.graph && app.panelOpen && app.view !== 'resource' && app.view !== 'simulate'"
       />
       <AgentPanel v-if="!showFirstRun && graph.graph" />
     </div>

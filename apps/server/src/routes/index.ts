@@ -1,7 +1,9 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyReply } from 'fastify'
 import { z } from 'zod'
 import {
   addCredentialsRequestSchema,
+  simChangeSchema,
+  simulationScopeSchema,
   insightsRequestSchema,
   logQueryRequestSchema,
   metricsRequestSchema,
@@ -18,6 +20,11 @@ import { streamMetrics } from '../metrics/stream.js'
 import { launchSsmTerminal, TerminalLaunchError } from '../terminal/ssm.js'
 import { evaluateCompliance } from '../compliance/evaluate.js'
 import { CredentialsError, addAccessKeys } from '../aws/credentials-store.js'
+import { applySimulation } from '../simulation/apply.js'
+import { exportCli, exportTerraform } from '../simulation/export.js'
+import { simulationImpact } from '../simulation/impact.js'
+import { scopeGraph } from '../simulation/scope.js'
+import type { SimulationStore } from '../simulation/store.js'
 
 const metricStreamQuery = z.object({
   nodeIds: z.string().min(1),
@@ -41,6 +48,7 @@ const agentChatSchema = z.object({
 export interface RouteContext {
   provider: CloudProvider
   config: ServerConfig
+  simulations: SimulationStore
 }
 
 const profileQuery = z.object({ profile: z.string().min(1) })
@@ -67,10 +75,20 @@ const ssmTerminalSchema = z.object({ nodeId: z.string().min(1), profile: z.strin
 const alarmHistoryQuery = z.object({ region: z.string().min(1) })
 const costQuery = z.object({ refresh: z.enum(['0', '1']).optional() })
 const costExplorerSchema = z.object({ enabled: z.boolean() })
+const simulationCreateSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  /** Omitted for the whole scan. */
+  scope: simulationScopeSchema.nullable().optional(),
+})
+const simulationUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  changes: z.array(simChangeSchema).max(500).optional(),
+})
+const simulationExportQuery = z.object({ format: z.enum(['cli', 'terraform']).default('cli') })
 const alarmsQuery = z.object({ state: z.string().optional() })
 
 export async function registerRoutes(app: FastifyInstance, ctx: RouteContext): Promise<void> {
-  const { provider, config } = ctx
+  const { provider, config, simulations } = ctx
 
   // ---- meta -------------------------------------------------------------
 
@@ -184,6 +202,72 @@ export async function registerRoutes(app: FastifyInstance, ctx: RouteContext): P
     const { enabled } = costExplorerSchema.parse(request.body)
     await provider.setCostExplorerEnabled(enabled)
     return { enabled }
+  })
+
+  // ---- simulations ------------------------------------------------------
+  // What-if copies of the scan. Nothing here calls AWS except pricing (read
+  // only, free); the exports are text for the user to run.
+
+  const loadSimulation = (id: string) => {
+    const stored = simulations.get(id)
+    if (!stored) return null
+    return { stored, simulated: applySimulation(stored.base, stored.simulation) }
+  }
+  const notFound = (reply: FastifyReply) =>
+    reply.code(404).send({ error: 'No such simulation', missingPermission: null, code: 'NOT_FOUND' })
+
+  app.get('/api/simulations', async () => {
+    const graph = provider.getGraph()
+    return graph ? simulations.list(graph.accountId) : []
+  })
+
+  app.post('/api/simulations', async (request, reply) => {
+    const { name, scope } = simulationCreateSchema.parse(request.body)
+    const graph = provider.getGraph()
+    if (!graph) return reply.code(409).send({ error: 'Scan an account before cloning it.', missingPermission: null, code: 'NO_SCAN' })
+    const simulation = simulations.create(name, scopeGraph(graph, scope ?? null), Date.now(), scope ?? null)
+    return loadSimulation(simulation.id)!.simulated
+  })
+
+  app.get<{ Params: { id: string } }>('/api/simulations/:id', async (request, reply) => {
+    const loaded = loadSimulation(request.params.id)
+    return loaded ? loaded.simulated : notFound(reply)
+  })
+
+  app.put<{ Params: { id: string } }>('/api/simulations/:id', async (request, reply) => {
+    const patch = simulationUpdateSchema.parse(request.body)
+    if (!simulations.update(request.params.id, patch)) return notFound(reply)
+    return loadSimulation(request.params.id)!.simulated
+  })
+
+  app.delete<{ Params: { id: string } }>('/api/simulations/:id', async (request, reply) => {
+    return simulations.remove(request.params.id) ? reply.code(204).send() : notFound(reply)
+  })
+
+  /** Replace the frozen snapshot with the latest scan, keeping every change. */
+  app.post<{ Params: { id: string } }>('/api/simulations/:id/rebase', async (request, reply) => {
+    const graph = provider.getGraph()
+    if (!graph) return reply.code(409).send({ error: 'No scan to rebase onto.', missingPermission: null, code: 'NO_SCAN' })
+    const current = simulations.get(request.params.id)
+    if (!current) return notFound(reply)
+    simulations.rebase(request.params.id, scopeGraph(graph, current.simulation.scope))
+    return loadSimulation(request.params.id)!.simulated
+  })
+
+  app.get<{ Params: { id: string } }>('/api/simulations/:id/impact', async (request, reply) => {
+    const loaded = loadSimulation(request.params.id)
+    if (!loaded) return notFound(reply)
+    const [before, after] = await provider.estimateRunRates([loaded.stored.base, loaded.simulated.graph])
+    return simulationImpact(loaded.stored.base, loaded.simulated, [before!, after!])
+  })
+
+  app.get<{ Params: { id: string } }>('/api/simulations/:id/export', async (request, reply) => {
+    const { format } = simulationExportQuery.parse(request.query)
+    const loaded = loadSimulation(request.params.id)
+    if (!loaded) return notFound(reply)
+    return format === 'terraform'
+      ? exportTerraform(loaded.stored.base, loaded.simulated)
+      : exportCli(loaded.stored.base, loaded.simulated)
   })
 
   // ---- metrics ----------------------------------------------------------

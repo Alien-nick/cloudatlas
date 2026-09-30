@@ -8,6 +8,8 @@ export interface ResourceNodeData {
   /** Number of open findings; drives the badge pill. */
   findingCount: number
   worstSeverity: 'critical' | 'warning' | null
+  /** Set only on a simulation's canvas: what the simulation did to this resource. */
+  simStatus?: 'added' | 'changed' | null
 }
 
 export interface ContainerNodeData {

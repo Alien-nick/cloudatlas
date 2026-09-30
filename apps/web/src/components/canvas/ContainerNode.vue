@@ -6,8 +6,12 @@ import type { ContainerNodeData } from './nodeData'
 
 const graph = useGraphStore()
 
-const props = defineProps<{ data: ContainerNodeData }>()
-const emit = defineEmits<{ toggle: [id: string] }>()
+/**
+ * `simulatable`: offer to pick this VPC for a simulation (the live diagram
+ * only); `picked`: it is among the VPCs picked.
+ */
+const props = defineProps<{ data: ContainerNodeData; simulatable?: boolean; picked?: boolean }>()
+const emit = defineEmits<{ toggle: [id: string]; simulate: [id: string] }>()
 
 const type = computed(() => props.data.node.type)
 const isPublicSubnet = computed(() => type.value === 'subnet' && props.data.node.isPublic === true)
@@ -98,6 +102,21 @@ const chip = computed(() => {
         @click.stop="emit('toggle', data.node.id)"
       >
         {{ data.collapsed ? '+' : '−' }}
+      </button>
+      <button
+        v-if="simulatable && type === 'vpc'"
+        type="button"
+        class="ml-[2px] flex h-[18px] cursor-pointer items-center gap-[4px] rounded-[5px] border px-[7px] text-[10px] font-medium transition-colors"
+        :class="
+          picked
+            ? 'border-[#a77dff] bg-[#8C4FFF] text-white'
+            : 'border-[#8C4FFF]/60 bg-panel text-[#a77dff] hover:border-[#a77dff] hover:text-text'
+        "
+        :aria-pressed="picked"
+        :title="picked ? 'Picked for a simulation — click to leave it out' : 'Pick this VPC to clone into a simulation; pick more to clone them together'"
+        @click.stop="emit('simulate', data.node.id)"
+      >
+        {{ picked ? '✓ Picked' : '◇ Simulate' }}
       </button>
     </div>
   </div>

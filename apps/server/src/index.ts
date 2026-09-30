@@ -5,6 +5,8 @@ import { ZodError } from 'zod'
 import { loadConfig } from './config.js'
 import { loggerOptions } from './logger.js'
 import { createProvider } from './providers/index.js'
+import { defaultDbPath } from './db/index.js'
+import { MemorySimulationStore, SqliteSimulationStore, type SimulationStore } from './simulation/store.js'
 import { registerRoutes } from './routes/index.js'
 import { registerLocalOnlyGuard } from './security.js'
 
@@ -65,8 +67,14 @@ const provider = createProvider(config.provider, {
   log: (message, detail) => app.log.info(detail ?? {}, message),
 })
 
+// Simulations sit beside the scan history, in the same local database file.
+// Demo mode keeps them in memory: the demo account is fiction, and plans made
+// against it do not belong in the database that holds real scans.
+const simulations: SimulationStore =
+  config.provider === 'demo' ? new MemorySimulationStore() : new SqliteSimulationStore(defaultDbPath(rootDir))
+
 async function start(): Promise<void> {
-  await registerRoutes(app, { provider, config })
+  await registerRoutes(app, { provider, config, simulations })
   await app.listen({ host: config.host, port: config.port })
 
   const notes = [

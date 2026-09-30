@@ -31,6 +31,7 @@ import {
   type WafSampledRequestsRequest,
   type WafSampledResponse,
   type CostReport,
+  type RunRate,
   runRateTotal,
 } from '@cloudatlas/shared'
 import { analyzeSecurityGroups } from '../../graph/sg-risk.js'
@@ -57,6 +58,7 @@ import { generateLogEvents, generateTailBatch } from './logs.js'
 import { DEMO_PRICE_BOOK, demoActualSpend } from './cost.js'
 import { emptySpend } from '../../cost/actual.js'
 import { planCostReport } from '../../cost/report.js'
+import { estimateRunRate } from '../../cost/estimate.js'
 
 const MINUTE = 60_000
 
@@ -734,6 +736,10 @@ export class DemoProvider implements CloudProvider {
       emptySpend('demo', null),
     )
     return { ...report, actual: demoActualSpend(runRateTotal(report.runRate)) }
+  }
+
+  async estimateRunRates(graphs: Graph[]): Promise<RunRate[]> {
+    return graphs.map((graph) => estimateRunRate(graph, DEMO_PRICE_BOOK))
   }
 
   /** Demo figures are fixtures; there is no Cost Explorer to turn on. */

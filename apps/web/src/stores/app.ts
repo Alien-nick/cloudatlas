@@ -13,6 +13,7 @@ export type ViewId =
   | 'analytics'
   | 'compliance'
   | 'cost'
+  | 'simulate'
   /** A single resource, full page. Reached from a resource, not the sidebar. */
   | 'resource'
 export type DetailTab =
@@ -34,6 +35,7 @@ export const VIEWS: Array<{ id: ViewId; label: string }> = [
   { id: 'health', label: 'Health' },
   { id: 'compliance', label: 'Compliance' },
   { id: 'cost', label: 'Cost' },
+  { id: 'simulate', label: 'Simulate' },
   { id: 'network', label: 'Network' },
   { id: 'security', label: 'Security Groups' },
   { id: 'logs', label: 'Logs' },

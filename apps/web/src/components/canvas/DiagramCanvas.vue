@@ -8,6 +8,7 @@ import { isContainerType } from '@cloudatlas/shared'
 import { useAppStore } from '@/stores/app'
 import { useGraphStore } from '@/stores/graph'
 import { useHealthStore } from '@/stores/health'
+import { useSimulationStore } from '@/stores/simulation'
 import { categoryColor } from '@/lib/utils'
 import CaEmptyState from '../ui/CaEmptyState.vue'
 import ContainerNode from './ContainerNode.vue'
@@ -17,6 +18,53 @@ import { computeLayout, decorate, type DiagramLayout, type FlowEdge, type FlowNo
 const app = useAppStore()
 const graph = useGraphStore()
 const health = useHealthStore()
+const sim = useSimulationStore()
+
+/**
+ * VPCs picked for a simulation, straight from the diagram. Pick one or
+ * several with their Simulate chips; the bar at the bottom clones them.
+ */
+const picks = ref(new Set<string>())
+const includeOutside = ref(false)
+const cloning = ref(false)
+
+function togglePick(id: string): void {
+  const next = new Set(picks.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  picks.value = next
+}
+
+const pickedVpcs = computed(() =>
+  [...picks.value]
+    .map((id) => graph.graph?.nodes.find((node) => node.id === id))
+    .filter((node): node is NonNullable<typeof node> => Boolean(node)),
+)
+// A rescan can drop a VPC; a pick of something gone is dropped with it.
+watch(
+  () => graph.graph,
+  (next) => {
+    const ids = new Set(next?.nodes.filter((node) => node.type === 'vpc').map((node) => node.id) ?? [])
+    if ([...picks.value].some((id) => !ids.has(id))) picks.value = new Set([...picks.value].filter((id) => ids.has(id)))
+  },
+)
+
+async function clonePicked(): Promise<void> {
+  const vpcs = pickedVpcs.value
+  if (vpcs.length === 0 || cloning.value) return
+  cloning.value = true
+  const name =
+    vpcs.length === 1 ? `${graph.displayName(vpcs[0]!)} · simulation` : `${vpcs.map((vpc) => graph.displayName(vpc)).join(' + ')} · simulation`
+  await sim.create(name.length > 80 ? `${vpcs.length} VPCs · simulation` : name, {
+    vpcIds: vpcs.map((vpc) => vpc.id),
+    includeOutside: includeOutside.value,
+  })
+  cloning.value = false
+  if (sim.current) {
+    picks.value = new Set()
+    app.setView('simulate')
+  }
+}
 
 const FLOW_ID = 'cloudatlas'
 const { fitView, zoomIn, zoomOut, viewport, onPaneClick, onNodesInitialized } =
@@ -202,9 +250,40 @@ async function runExport(format: 'PNG' | 'SVG'): Promise<void> {
         <ResourceNode :data="nodeProps.data" />
       </template>
       <template #node-container="nodeProps">
-        <ContainerNode :data="nodeProps.data" @toggle="graph.toggleCollapsed($event)" />
+        <ContainerNode
+          :data="nodeProps.data"
+          simulatable
+          :picked="picks.has(nodeProps.id)"
+          @toggle="graph.toggleCollapsed($event)"
+          @simulate="togglePick($event)"
+        />
       </template>
 
+      <Panel v-if="pickedVpcs.length" position="top-center" class="!mt-[46px]">
+        <div class="flex items-center gap-[12px] whitespace-nowrap rounded-[10px] border border-[#8C4FFF]/70 bg-panel px-[12px] py-[8px] shadow-xl">
+          <span class="text-[12px] font-semibold">
+            {{ pickedVpcs.length }} VPC{{ pickedVpcs.length === 1 ? '' : 's' }} picked
+          </span>
+          <span class="max-w-[260px] truncate text-[11px] text-muted" :title="pickedVpcs.map((vpc) => graph.displayName(vpc)).join(', ')">
+            {{ pickedVpcs.map((vpc) => graph.displayName(vpc)).join(', ') }}
+          </span>
+          <label class="flex cursor-pointer items-center gap-[5px] text-[11px] text-muted">
+            <input v-model="includeOutside" type="checkbox" class="cursor-pointer" />
+            + services outside VPCs
+          </label>
+          <button
+            type="button"
+            class="h-[28px] cursor-pointer rounded-[7px] bg-[#8C4FFF] px-[12px] text-[11.5px] font-semibold text-white hover:bg-[#7a3ff0] disabled:opacity-60"
+            :disabled="cloning"
+            @click="clonePicked"
+          >
+            {{ cloning ? 'Cloning…' : 'Clone into simulation' }}
+          </button>
+          <button type="button" class="cursor-pointer text-[11px] text-muted hover:text-text" @click="picks = new Set()">
+            Clear
+          </button>
+        </div>
+      </Panel>
       <Panel position="bottom-left">
         <div class="flex flex-wrap gap-[6px]">
           <div class="flex overflow-hidden rounded-[8px] border border-border2 bg-panel">

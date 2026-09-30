@@ -11,16 +11,30 @@ import type { PriceBook, PriceKey } from '../../cost/pricing.js'
  */
 
 const HOURLY: Record<string, number> = {
-  // EC2 instances
+  // EC2 instances: those the demo runs, and every type the simulator offers.
+  'ec2|t3.medium': 0.0416,
   'ec2|t3.large': 0.0832,
+  'ec2|t4g.medium': 0.0336,
   'ec2|t4g.large': 0.0672,
+  'ec2|m6i.large': 0.096,
   'ec2|m6i.xlarge': 0.192,
   'ec2|m6g.xlarge': 0.154,
-  // RDS PostgreSQL
-  'rds|db.r6g.2xlarge|PostgreSQL|false': 0.899,
-  'rds|db.r6g.2xlarge|PostgreSQL|true': 1.798,
+  'ec2|m7g.large': 0.0816,
+  'ec2|c7g.large': 0.0725,
+  'ec2|r6g.large': 0.1008,
+  // RDS, Single-AZ; Multi-AZ is twice this. Open engines share a rate here.
+  'rds|db.t3.medium': 0.072,
+  'rds|db.t4g.medium': 0.065,
+  'rds|db.m6i.large': 0.178,
+  'rds|db.m7g.large': 0.168,
+  'rds|db.r6g.large': 0.225,
+  'rds|db.r6g.xlarge': 0.45,
+  'rds|db.r6g.2xlarge': 0.899,
   // ElastiCache
+  'elasticache|cache.t4g.small|Redis': 0.032,
+  'elasticache|cache.t4g.medium|Redis': 0.065,
   'elasticache|cache.r6g.large|Redis': 0.206,
+  'elasticache|cache.r7g.large|Redis': 0.219,
   nat: 0.045,
   alb: 0.0225,
   nlb: 0.0225,
@@ -42,8 +56,10 @@ function demoPrice(key: PriceKey): number | null {
   switch (key.kind) {
     case 'ec2':
       return HOURLY[`ec2|${key.instanceType}`] ?? null
-    case 'rds':
-      return HOURLY[`rds|${key.instanceClass}|${key.engine}|${key.multiAz}`] ?? null
+    case 'rds': {
+      const single = HOURLY[`rds|${key.instanceClass}`]
+      return single === undefined ? null : single * (key.multiAz ? 2 : 1)
+    }
     case 'elasticache':
       return HOURLY[`elasticache|${key.nodeType}|${key.engine}`] ?? null
     case 'ebs':

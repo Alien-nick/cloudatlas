@@ -53,7 +53,7 @@ export interface ScanResult {
 }
 
 /** The synthetic node risky-rule edges point at. */
-function internetNode(): GraphNode {
+export function internetNode(): GraphNode {
   return {
     id: INTERNET_NODE_ID,
     arn: null,
