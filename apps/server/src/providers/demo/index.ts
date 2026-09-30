@@ -453,6 +453,12 @@ export class DemoProvider implements CloudProvider {
         }
       }
       const sampled = sampleSeries(node.id, def.name, window.start, window.end, period)
+      // The demo baselines are written in the units people read (latency in
+      // ms, memory in GB), but a provider must return what CloudWatch returns
+      // — seconds, bytes — because the UI applies the catalog's display scale.
+      // Without this, read latency showed as 33,853 ms and memory as ~0 GB.
+      const scale = def.scale ?? 1
+      const values = scale === 1 ? sampled.values : sampled.values.map((v) => (v === null ? null : v / scale))
       return {
         nodeId: node.id,
         metricName: def.name,
@@ -461,7 +467,7 @@ export class DemoProvider implements CloudProvider {
         unit: def.unit,
         stat: request.stat ?? def.stat,
         timestamps: sampled.timestamps,
-        values: sampled.values,
+        values,
         period,
         unavailableReason: null,
       }

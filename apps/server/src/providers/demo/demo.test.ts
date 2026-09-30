@@ -144,6 +144,25 @@ describe('demo provider surface', () => {
     )
   })
 
+  it('returns values in CloudWatch units, which the UI then scales for display', async () => {
+    // The UI multiplies ReadLatency by 1000 and divides FreeableMemory by 1e9.
+    // A demo that returned ms and GB displayed 34 ms of latency as 33,853 ms
+    // and 22 GB of free memory as ~0.
+    const { provider } = await scanned()
+    const end = Date.now()
+    const response = await provider.getMetrics({
+      nodeId: 'rds-primary',
+      metricNames: ['ReadLatency', 'FreeableMemory'],
+      start: end - 60 * MINUTE,
+      end,
+    })
+    const latest = (name: string) =>
+      response.series.find((s) => s.metricName === name)?.values.filter((v) => v !== null).at(-1) ?? NaN
+    expect(latest('ReadLatency')).toBeLessThan(1) // seconds: 34 ms is 0.034
+    expect(latest('ReadLatency')).toBeGreaterThan(0.0001)
+    expect(latest('FreeableMemory')).toBeGreaterThan(1e8) // bytes, not GB
+  })
+
   it('explains why a stopped instance has no datapoints instead of showing zeros', async () => {
     const { provider } = await scanned()
     const end = Date.now()
