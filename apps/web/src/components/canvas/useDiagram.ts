@@ -315,6 +315,9 @@ export function decorate(
           }
         : {}),
       style: {
+        // Inline as well as in Vue Flow's stylesheet: export copies styles
+        // element by element, and an SVG path with no fill is filled black.
+        fill: 'none',
         stroke: color,
         strokeWidth: isRisk ? 2 : active ? 2 : 1.3,
         strokeDasharray: EDGE_DASH[edge.kind],

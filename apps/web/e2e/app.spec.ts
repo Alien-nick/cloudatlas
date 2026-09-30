@@ -271,6 +271,34 @@ test.describe('export', () => {
     const file = await download
     expect(file.suggestedFilename()).toMatch(/\.png$/)
   })
+
+  /**
+   * The export once inherited the canvas's live zoom: zoomed out, the image
+   * came out shrunk and cut off, and each edge's invisible click target was
+   * drawn as a black fill. Neither showed at 100%, which is where this suite
+   * used to look. So: export at two zoom levels and require the same frame.
+   */
+  test('frames the whole diagram the same way at any zoom', async ({ page }) => {
+    await scanned(page)
+
+    async function exportSvg(): Promise<string> {
+      const download = page.waitForEvent('download', { timeout: 45_000 })
+      await page.getByRole('button', { name: 'SVG', exact: true }).click()
+      const path = await (await download).path()
+      const { readFileSync } = await import('node:fs')
+      return readFileSync(path!, 'utf8')
+    }
+    const size = (svg: string) => svg.match(/<svg[^>]*width="([\d.]+)" height="([\d.]+)"/)?.slice(1)
+
+    const atDefault = await exportSvg()
+    await page.getByRole('button', { name: 'Fit', exact: true }).click()
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: '+', exact: true }).click()
+    const zoomedIn = await exportSvg()
+
+    expect(size(atDefault)).toBeTruthy()
+    expect(size(zoomedIn)).toEqual(size(atDefault))
+    expect(zoomedIn).not.toContain('vue-flow__edge-interaction')
+  })
 })
 
 

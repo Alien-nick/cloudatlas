@@ -27,29 +27,29 @@ export interface Bounds {
   height: number
 }
 
+export interface Rect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 /**
- * Bounding box of the rendered nodes.
- *
- * Measured from the node positions rather than from the viewport, because the
- * viewport only knows what is currently visible.
+ * The box to export: every rect, plus padding. Null when there is nothing.
  */
-export function diagramBounds(
-  nodes: Array<{ position: { x: number; y: number }; dimensions?: { width: number; height: number } }>,
-): Bounds | null {
-  if (nodes.length === 0) return null
+export function boundsOf(rects: Rect[]): Bounds | null {
+  if (rects.length === 0) return null
 
   let minX = Number.POSITIVE_INFINITY
   let minY = Number.POSITIVE_INFINITY
   let maxX = Number.NEGATIVE_INFINITY
   let maxY = Number.NEGATIVE_INFINITY
 
-  for (const node of nodes) {
-    const width = node.dimensions?.width ?? 0
-    const height = node.dimensions?.height ?? 0
-    minX = Math.min(minX, node.position.x)
-    minY = Math.min(minY, node.position.y)
-    maxX = Math.max(maxX, node.position.x + width)
-    maxY = Math.max(maxY, node.position.y + height)
+  for (const rect of rects) {
+    minX = Math.min(minX, rect.x)
+    minY = Math.min(minY, rect.y)
+    maxX = Math.max(maxX, rect.x + rect.width)
+    maxY = Math.max(maxY, rect.y + rect.height)
   }
 
   if (!Number.isFinite(minX) || !Number.isFinite(maxX)) return null
@@ -59,6 +59,42 @@ export function diagramBounds(
     width: maxX - minX + PADDING * 2,
     height: maxY - minY + PADDING * 2,
   }
+}
+
+/**
+ * Bounding box of the diagram as drawn, in flow coordinates.
+ *
+ * Measured from the rendered node elements rather than from Vue Flow's node
+ * data. The data was the first choice and was wrong twice: `position` is
+ * relative to the parent container in a compound layout, and even the
+ * computed absolute positions and dimensions described a box more than twice
+ * the size of what was on screen — leaving the diagram in one corner of a
+ * mostly empty image. What is rendered is, by definition, what the export
+ * should contain.
+ *
+ * Measuring the DOM rather than the viewport also still covers the whole
+ * diagram: nodes outside the visible area are rendered, just off screen.
+ *
+ * `pane` is the element carrying the live pan and zoom, so dividing by its
+ * scale turns screen pixels back into flow units whatever the zoom is.
+ */
+export function renderedBounds(pane: HTMLElement): Bounds | null {
+  const transform = getComputedStyle(pane).transform
+  const zoom = (transform && transform !== 'none' ? new DOMMatrixReadOnly(transform).a : 1) || 1
+  const origin = pane.getBoundingClientRect()
+  const rects = [...pane.querySelectorAll<HTMLElement>('.vue-flow__node')]
+    .filter((element) => element.offsetParent !== null)
+    .map((element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        x: (rect.left - origin.left) / zoom,
+        y: (rect.top - origin.top) / zoom,
+        width: rect.width / zoom,
+        height: rect.height / zoom,
+      }
+    })
+    .filter((rect) => rect.width > 0 && rect.height > 0)
+  return boundsOf(rects)
 }
 
 /** `cortex-prod-us-east-1-2026-09-23.png` */
@@ -82,8 +118,14 @@ function download(dataUrl: string, filename: string): void {
 }
 
 export interface ExportOptions {
-  /** The `.vue-flow__viewport` element. */
-  viewport: HTMLElement
+  /**
+   * The `.vue-flow__transformationpane` element: the one holding nodes and
+   * edges in flow coordinates, and carrying the live pan and zoom. Not
+   * `.vue-flow__viewport`, which is its untransformed container — exporting
+   * that inherited whatever zoom the canvas was at, so a zoomed-out canvas
+   * exported shrunk and cut off.
+   */
+  pane: HTMLElement
   bounds: Bounds
   filename: string
   /** Page background, so the image is not transparent where nothing is drawn. */
@@ -93,35 +135,42 @@ export interface ExportOptions {
 }
 
 /**
- * Capture with the viewport transform overridden.
- *
- * Restoring the original transform in a `finally` matters: throwing partway
- * through would otherwise leave the diagram frozen at the export framing, which
- * looks like the canvas broke.
+ * Capture the whole diagram, framed on its bounds rather than on whatever is
+ * currently on screen.
  */
 async function capture(
   options: ExportOptions,
   render: (element: HTMLElement, config: Record<string, unknown>) => Promise<string>,
 ): Promise<string> {
-  const { viewport, bounds, background } = options
-  const scale = options.scale ?? 1
-  const previous = viewport.style.transform
+  const { pane, bounds, background } = options
 
-  viewport.style.transform = `translate(${-bounds.x * scale}px, ${-bounds.y * scale}px) scale(${scale})`
-  try {
-    return await render(viewport, {
-      backgroundColor: background,
-      width: bounds.width * scale,
-      height: bounds.height * scale,
-      style: { width: `${bounds.width * scale}px`, height: `${bounds.height * scale}px` },
-      // The minimap and the toolbar are chrome, not diagram.
-      filter: (node: HTMLElement) =>
-        !node.classList?.contains('vue-flow__minimap') &&
-        !node.classList?.contains('vue-flow__panel'),
-    })
-  } finally {
-    viewport.style.transform = previous
-  }
+  // The clone's transform replaces the live pan and zoom entirely, framing
+  // the diagram at 1:1 on its bounds; the live canvas never moves. The origin
+  // is stated explicitly: scaling about the centre shifted the diagram off the
+  // top-left and cropped it.
+  //
+  // Resolution comes from `pixelRatio`, which scales the output canvas. A CSS
+  // scale() on the clone did not take effect, leaving the diagram in one
+  // corner of an image twice its size.
+  return render(pane, {
+    backgroundColor: background,
+    width: bounds.width,
+    height: bounds.height,
+    pixelRatio: options.scale ?? 1,
+    style: {
+      width: `${bounds.width}px`,
+      height: `${bounds.height}px`,
+      transform: `translate(${-bounds.x}px, ${-bounds.y}px)`,
+      transformOrigin: '0 0',
+    },
+    // The minimap and the toolbar are chrome, not diagram. So is each
+    // edge's interaction path: a wide invisible stroke that exists only to
+    // be clicked, which the export would otherwise draw as a black fill.
+    filter: (node: HTMLElement) =>
+      !node.classList?.contains('vue-flow__minimap') &&
+      !node.classList?.contains('vue-flow__panel') &&
+      !node.classList?.contains('vue-flow__edge-interaction'),
+  })
 }
 
 export async function exportPng(options: ExportOptions): Promise<void> {

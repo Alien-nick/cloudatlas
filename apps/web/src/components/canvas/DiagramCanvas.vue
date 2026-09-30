@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { Panel, VueFlow, useVueFlow, type NodeMouseEvent } from '@vue-flow/core'
-import { diagramBounds, exportFilename, exportPng, exportSvg } from '@/lib/export'
+import { exportFilename, exportPng, exportSvg, renderedBounds } from '@/lib/export'
 import { cssVar } from '@/lib/chart'
 import { MiniMap } from '@vue-flow/minimap'
 import { isContainerType } from '@cloudatlas/shared'
@@ -19,7 +19,7 @@ const graph = useGraphStore()
 const health = useHealthStore()
 
 const FLOW_ID = 'cloudatlas'
-const { fitView, zoomIn, zoomOut, viewport, getNodes, onPaneClick, onNodesInitialized } =
+const { fitView, zoomIn, zoomOut, viewport, onPaneClick, onNodesInitialized } =
   useVueFlow(FLOW_ID)
 
 const layout = shallowRef<DiagramLayout | null>(null)
@@ -150,9 +150,9 @@ const exportError = ref<string | null>(null)
 
 async function runExport(format: 'PNG' | 'SVG'): Promise<void> {
   if (exporting.value) return
-  const viewportEl = document.querySelector<HTMLElement>('.vue-flow__viewport')
-  const bounds = diagramBounds(getNodes.value)
-  if (!viewportEl || !bounds) {
+  const pane = document.querySelector<HTMLElement>('.vue-flow__transformationpane')
+  const bounds = pane ? renderedBounds(pane) : null
+  if (!pane || !bounds) {
     exportError.value = 'Nothing to export yet — wait for the layout to finish.'
     return
   }
@@ -161,7 +161,7 @@ async function runExport(format: 'PNG' | 'SVG'): Promise<void> {
   exportError.value = null
   try {
     const options = {
-      viewport: viewportEl,
+      pane,
       bounds,
       background: cssVar('--ca-canvas', '#0d1013'),
       filename: exportFilename(
