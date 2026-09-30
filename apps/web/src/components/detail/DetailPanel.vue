@@ -15,6 +15,7 @@ import MetricsTab from './MetricsTab.vue'
 import OverviewTab from './OverviewTab.vue'
 import SecurityTab from './SecurityTab.vue'
 import ComplianceTab from './ComplianceTab.vue'
+import CostTab from './CostTab.vue'
 import TagsTab from './TagsTab.vue'
 
 const app = useAppStore()
@@ -30,6 +31,7 @@ const ALL_TABS: Array<{ id: DetailTab; label: string; only?: string[] }> = [
   { id: 'connections', label: 'Connections' },
   { id: 'security', label: 'Security' },
   { id: 'compliance', label: 'Compliance' },
+  { id: 'cost', label: 'Cost' },
   { id: 'tags', label: 'Tags' },
   { id: 'json', label: 'JSON' },
 ]
@@ -217,6 +219,7 @@ async function copy(kind: 'arn' | 'ssm'): Promise<void> {
       <ConnectionsTab v-else-if="app.detailTab === 'connections'" :node="node" />
       <SecurityTab v-else-if="app.detailTab === 'security'" :node="node" />
       <ComplianceTab v-else-if="app.detailTab === 'compliance'" :node="node" />
+      <CostTab v-else-if="app.detailTab === 'cost'" :node="node" />
       <TagsTab v-else-if="app.detailTab === 'tags'" :node="node" />
       <JsonTab v-else-if="app.detailTab === 'json'" :node="node" />
     </div>

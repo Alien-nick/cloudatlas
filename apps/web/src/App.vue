@@ -15,6 +15,7 @@ import HealthView from '@/components/views/HealthView.vue'
 import InventoryView from '@/components/views/InventoryView.vue'
 import AnalyticsView from '@/components/views/AnalyticsView.vue'
 import ComplianceView from '@/components/views/ComplianceView.vue'
+import CostView from '@/components/views/CostView.vue'
 import LogsView from '@/components/views/LogsView.vue'
 import ResourceDetailView from '@/components/views/ResourceDetailView.vue'
 
@@ -142,6 +143,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
         <LogsView v-else-if="app.view === 'logs'" />
         <AnalyticsView v-else-if="app.view === 'analytics'" />
         <ComplianceView v-else-if="app.view === 'compliance'" />
+        <CostView v-else-if="app.view === 'cost'" />
         <ResourceDetailView v-else-if="app.view === 'resource'" />
       </main>
 

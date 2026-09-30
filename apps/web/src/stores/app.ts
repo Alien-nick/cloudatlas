@@ -12,6 +12,7 @@ export type ViewId =
   | 'inventory'
   | 'analytics'
   | 'compliance'
+  | 'cost'
   /** A single resource, full page. Reached from a resource, not the sidebar. */
   | 'resource'
 export type DetailTab =
@@ -23,6 +24,7 @@ export type DetailTab =
   | 'connections'
   | 'security'
   | 'compliance'
+  | 'cost'
   | 'tags'
   | 'json'
 export type Theme = 'dark' | 'light'
@@ -31,6 +33,7 @@ export const VIEWS: Array<{ id: ViewId; label: string }> = [
   { id: 'topology', label: 'Topology' },
   { id: 'health', label: 'Health' },
   { id: 'compliance', label: 'Compliance' },
+  { id: 'cost', label: 'Cost' },
   { id: 'network', label: 'Network' },
   { id: 'security', label: 'Security Groups' },
   { id: 'logs', label: 'Logs' },

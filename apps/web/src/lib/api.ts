@@ -4,6 +4,7 @@ import type {
   Alarm,
   AlarmsResponse,
   ComplianceReport,
+  CostReport,
   FindingsResponse,
   Graph,
   Identity,
@@ -103,6 +104,9 @@ export const api = {
   findings: () => request<FindingsResponse>('/api/findings'),
   /** Null until the first scan completes. */
   compliance: () => request<ComplianceReport | null>('/api/compliance'),
+  /** Null until the first scan completes. `refresh` re-reads Cost Explorer, which is billed. */
+  cost: (refresh = false) => request<CostReport | null>(`/api/cost${refresh ? '?refresh=1' : ''}`),
+  setCostExplorer: (enabled: boolean) => post<{ enabled: boolean }>('/api/cost/explorer', { enabled }),
   alarms: (state?: string) =>
     request<AlarmsResponse>(`/api/alarms${state ? `?state=${encodeURIComponent(state)}` : ''}`),
   alarmHistory: (name: string, region: string) =>
