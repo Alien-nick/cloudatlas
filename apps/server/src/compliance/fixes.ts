@@ -1,6 +1,7 @@
 import type { Fix, GraphNode, SecurityGroupRule } from '@cloudatlas/shared'
 import { WORLD_CIDRS } from '@cloudatlas/shared'
 import type { CheckContext } from './checks.js'
+import { awsCli, fact, instanceId, q, rdsTarget, regionOf, withInputFlag } from '../aws/cli-command.js'
 
 /**
  * Copy-paste fixes: AWS CLI commands for one failing resource.
@@ -27,34 +28,7 @@ export interface FixContext extends CheckContext {
 
 type FixBuilder = (node: GraphNode, context: FixContext) => Omit<Fix, 'needsInput'> | null
 
-const SAFE = /^[\w.\-/:@=,+]+$/
-
-/** Single-quote for a POSIX shell unless the value is plainly safe. */
-function q(value: string): string {
-  return SAFE.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`
-}
-
-function fact(node: GraphNode, key: string): string | undefined {
-  return node.props.find((prop) => prop.k === key)?.v
-}
-
-/** Global resources are managed through us-east-1. */
-function regionOf(node: GraphNode): string {
-  return node.region === 'global' ? 'us-east-1' : node.region
-}
-
-function aws(node: GraphNode, context: FixContext, command: string, region = regionOf(node)): string {
-  return `aws ${command} --region ${q(region)} --profile ${q(context.profile)}`
-}
-
-const instanceId = (node: GraphNode): string => fact(node, 'Instance ID') ?? node.id
-
-/** RDS is addressed by identifier, which the builder uses as the node name. */
-function rdsTarget(node: GraphNode): string {
-  return node.type === 'rds-cluster'
-    ? `modify-db-cluster --db-cluster-identifier ${q(node.name)}`
-    : `modify-db-instance --db-instance-identifier ${q(node.name)}`
-}
+const aws = awsCli
 
 /** CloudWatch log types each engine can export; order is what the console shows. */
 function logTypesFor(engine: string | undefined): string[] | null {
@@ -348,7 +322,7 @@ const BUILDERS: Record<string, FixBuilder> = {
 export function fixFor(checkId: string, node: GraphNode, context: FixContext): Fix | undefined {
   const built = BUILDERS[checkId]?.(node, context)
   if (!built) return undefined
-  return { ...built, needsInput: built.commands.some((command) => /<[a-z][a-z0-9-]*>/.test(command)) }
+  return withInputFlag(built)
 }
 
 export const __testing = { q, logTypesFor, BUILDERS }
