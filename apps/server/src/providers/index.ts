@@ -1,3 +1,4 @@
+import { dirname } from 'node:path'
 import type { CloudProvider, DetectionConfig } from '@cloudatlas/shared'
 import { createDb, defaultDbPath } from '../db/index.js'
 import { DemoProvider } from './demo/index.js'
@@ -18,6 +19,7 @@ export function createProvider(kind: 'live' | 'demo', options: ProviderOptions):
   if (kind === 'demo') return new DemoProvider()
   return new LiveProvider({
     db: createDb(defaultDbPath(options.rootDir)),
+    dataDir: dirname(defaultDbPath(options.rootDir)),
     enableCostExplorer: options.enableCostExplorer ?? false,
     ...(options.keepScans ? { keepScans: options.keepScans } : {}),
     ...(options.detection ? { detection: options.detection } : {}),

@@ -30,6 +30,8 @@ import {
   type WafSampledRequest,
   type WafSampledRequestsRequest,
   type WafSampledResponse,
+  type CostReport,
+  runRateTotal,
 } from '@cloudatlas/shared'
 import { analyzeSecurityGroups } from '../../graph/sg-risk.js'
 import { applyHealth, detectPosture } from '../../health/index.js'
@@ -52,6 +54,9 @@ import {
 } from './series.js'
 import { unavailableReason } from '../../metrics/index.js'
 import { generateLogEvents, generateTailBatch } from './logs.js'
+import { DEMO_PRICE_BOOK, demoActualSpend } from './cost.js'
+import { emptySpend } from '../../cost/actual.js'
+import { planCostReport } from '../../cost/report.js'
 
 const MINUTE = 60_000
 
@@ -719,6 +724,20 @@ export class DemoProvider implements CloudProvider {
     const window = toDemoWindow(start, end)
     return changes.filter((c) => c.timestamp >= window.start && c.timestamp <= window.end)
   }
+
+  async getCostReport(): Promise<CostReport | null> {
+    const graph = this.getGraph()
+    if (!graph) return null
+    const report = planCostReport(graph, { profile: graph.profile }).build(
+      DEMO_PRICE_BOOK,
+      null,
+      emptySpend('demo', null),
+    )
+    return { ...report, actual: demoActualSpend(runRateTotal(report.runRate)) }
+  }
+
+  /** Demo figures are fixtures; there is no Cost Explorer to turn on. */
+  async setCostExplorerEnabled(): Promise<void> {}
 
   async getDatabaseLoad(nodeId: string, start: number, end: number): Promise<DatabaseLoad> {
     const node = this.nodeById(nodeId)

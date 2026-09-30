@@ -22,6 +22,7 @@ import type {
   TailOptions,
   WafSampledRequestsRequest,
   WafSampledResponse,
+  CostReport,
 } from '@cloudatlas/shared'
 import { choosePeriod, metricsFor, primaryMetricsFor } from '@cloudatlas/shared'
 import { AwsClient } from '../../aws/client.js'
@@ -40,6 +41,9 @@ import { fetchMetrics } from '../../metrics/index.js'
 import { getDatabaseLoad } from '../../metrics/insights-db.js'
 import { discoverLogGroups, queryInsights, queryLogs, tailLogs } from '../../logs/index.js'
 import { lookupChanges } from '../../changes/cloudtrail.js'
+import { getActualSpend, setCostExplorerEnabled } from '../../cost/actual.js'
+import { loadPriceBook } from '../../cost/pricing.js'
+import { planCostReport } from '../../cost/report.js'
 
 export class UnknownNodeError extends Error {
   readonly statusCode = 404
@@ -68,6 +72,8 @@ export interface LiveProviderOptions {
   healthTtlMs?: number
   /** Opt in to Cost Explorer, which is billed per request. */
   enableCostExplorer?: boolean
+  /** Local data directory, for the cost setting and the Cost Explorer cache. */
+  dataDir?: string
   /** Spike-detection thresholds from cloudatlas.config.json. */
   detection?: DetectionConfig
   log?: (message: string, detail?: Record<string, unknown>) => void
@@ -413,6 +419,33 @@ export class LiveProvider implements CloudProvider {
     } finally {
       await aws.destroy()
     }
+  }
+
+  private get dataDir(): string {
+    return this.options.dataDir ?? 'data'
+  }
+
+  async getCostReport(options: { refresh?: boolean } = {}): Promise<CostReport | null> {
+    const graph = this.getGraph()
+    if (!graph) return null
+    const aws = this.client(this.profileOrThrow(graph.profile))
+    const plan = planCostReport(graph, { profile: graph.profile })
+    // Prices and spend are independent; neither waits for the other.
+    const [prices, actual] = await Promise.all([
+      loadPriceBook(aws, plan.keys),
+      getActualSpend({
+        aws,
+        profile: graph.profile,
+        dataDir: this.dataDir,
+        enabledByConfig: this.options.enableCostExplorer ?? false,
+        refresh: options.refresh ?? false,
+      }),
+    ])
+    return plan.build(prices.book, prices.failure, actual)
+  }
+
+  async setCostExplorerEnabled(enabled: boolean): Promise<void> {
+    setCostExplorerEnabled(this.dataDir, enabled)
   }
 
   async getDatabaseLoad(nodeId: string, start: number, end: number): Promise<DatabaseLoad> {

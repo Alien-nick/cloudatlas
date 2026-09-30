@@ -65,6 +65,8 @@ const changesQuery = z.object({
 const ssmTerminalSchema = z.object({ nodeId: z.string().min(1), profile: z.string().min(1) })
 
 const alarmHistoryQuery = z.object({ region: z.string().min(1) })
+const costQuery = z.object({ refresh: z.enum(['0', '1']).optional() })
+const costExplorerSchema = z.object({ enabled: z.boolean() })
 const alarmsQuery = z.object({ state: z.string().optional() })
 
 export async function registerRoutes(app: FastifyInstance, ctx: RouteContext): Promise<void> {
@@ -166,6 +168,22 @@ export async function registerRoutes(app: FastifyInstance, ctx: RouteContext): P
     const graph = provider.getGraph()
     if (!graph) return reply.code(204).send()
     return evaluateCompliance(graph)
+  })
+
+  // Actual spend (Cost Explorer, cached), estimated run-rate and savings.
+  // `refresh` re-reads Cost Explorer, which bills per request; the cache
+  // still refuses a refresh within ten minutes of the last one.
+  app.get('/api/cost', async (request, reply) => {
+    const { refresh } = costQuery.parse(request.query)
+    const report = await provider.getCostReport({ refresh: refresh === '1' })
+    if (!report) return reply.code(204).send()
+    return report
+  })
+
+  app.post('/api/cost/explorer', async (request) => {
+    const { enabled } = costExplorerSchema.parse(request.body)
+    await provider.setCostExplorerEnabled(enabled)
+    return { enabled }
   })
 
   // ---- metrics ----------------------------------------------------------

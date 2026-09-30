@@ -238,6 +238,7 @@ describe('operation registry', () => {
       'logs',
       'network-firewall',
       'pi',
+      'pricing',
       'rds',
       'route53',
       's3',

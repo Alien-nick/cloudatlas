@@ -149,7 +149,11 @@ export const AWS_OPERATIONS: AwsOperationSpec[] = [
   { service: 'cloudtrail', operation: 'LookupEvents', purpose: 'Answer "what changed in the last hour" with write events on relevant resources.', status: 'active', milestone: 'M5', readOnlyAccess: 'covered' },
 
   // --- optional, behind a config flag ------------------------------------
-  { service: 'ce', operation: 'GetCostAndUsage', purpose: 'Monthly cost estimates for the Inventory column. Billed per request, so opt-in.', status: 'active', milestone: 'M6', optional: true, readOnlyAccess: 'unverified' },
+  { service: 'ce', operation: 'GetCostAndUsage', purpose: 'Actual spend by service, region and day for the Cost view. Billed per request, so opt-in and cached.', status: 'active', milestone: 'M6', optional: true, readOnlyAccess: 'unverified' },
+  { service: 'ce', operation: 'GetCostForecast', purpose: 'Projected month-end spend for the Cost view. Billed per request, so opt-in and cached.', status: 'active', milestone: 'M7', optional: true, readOnlyAccess: 'unverified' },
+
+  // --- pricing --------------------------------------------------------------
+  { service: 'pricing', operation: 'GetProducts', purpose: 'On-demand list prices for the instance, database and volume types in the scan, for run-rate estimates and savings. Free.', status: 'active', milestone: 'M7', readOnlyAccess: 'unverified' },
 ]
 
 /** IAM action string, e.g. "ec2:DescribeInstances". */

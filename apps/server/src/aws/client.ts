@@ -22,6 +22,7 @@ import {
 import { CloudFrontClient } from '@aws-sdk/client-cloudfront'
 import { CloudTrailClient } from '@aws-sdk/client-cloudtrail'
 import { CostExplorerClient } from '@aws-sdk/client-cost-explorer'
+import { PricingClient } from '@aws-sdk/client-pricing'
 import { PIClient } from '@aws-sdk/client-pi'
 import { CloudWatchLogsClient } from '@aws-sdk/client-cloudwatch-logs'
 import { WAFV2Client } from '@aws-sdk/client-wafv2'
@@ -54,6 +55,7 @@ export type ServiceKey =
   | 'wafv2'
   | 'cloudtrail'
   | 'ce'
+  | 'pricing'
   | 'pi'
 
 interface SdkClient {
@@ -88,6 +90,7 @@ const FACTORIES: Record<ServiceKey, (config: ClientConfig) => SdkClient> = {
   wafv2: (config) => new WAFV2Client(config) as unknown as SdkClient,
   cloudtrail: (config) => new CloudTrailClient(config) as unknown as SdkClient,
   ce: (config) => new CostExplorerClient(config) as unknown as SdkClient,
+  pricing: (config) => new PricingClient(config) as unknown as SdkClient,
   pi: (config) => new PIClient(config) as unknown as SdkClient,
 }
 
@@ -106,6 +109,9 @@ const GLOBAL_SERVICES: Partial<Record<ServiceKey, string>> = {
   iam: 'us-east-1',
   cloudfront: 'us-east-1',
   ce: 'us-east-1',
+  // The Price List API is served from us-east-1 (and ap-south-1); it answers
+  // for every region, so one endpoint covers all of them.
+  pricing: 'us-east-1',
   route53: 'us-east-1',
 }
 

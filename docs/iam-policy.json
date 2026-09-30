@@ -54,6 +54,7 @@
         "network-firewall:ListFirewalls",
         "pi:DescribeDimensionKeys",
         "pi:GetResourceMetrics",
+        "pricing:GetProducts",
         "rds:DescribeDBClusters",
         "rds:DescribeDBInstances",
         "rds:DescribeDBParameters",
@@ -87,7 +88,8 @@
       "Sid": "CloudAtlasCostExplorerOptional",
       "Effect": "Allow",
       "Action": [
-        "ce:GetCostAndUsage"
+        "ce:GetCostAndUsage",
+        "ce:GetCostForecast"
       ],
       "Resource": "*"
     }

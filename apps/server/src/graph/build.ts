@@ -73,6 +73,52 @@ export function plaintextListenersFact(
   return plaintext.map((listener) => `HTTP:${listener.Port ?? '?'}`).join(', ')
 }
 
+/** Targets registered across a load balancer's target groups, or null if unknown. */
+export function registeredTargetCount(targetGroupArns: string[], data: RegionScanData): number | null {
+  if (!targetGroupArns.every((arn) => data.targetHealth[arn] !== undefined)) return null
+  return targetGroupArns.reduce((sum, arn) => sum + (data.targetHealth[arn]?.length ?? 0), 0)
+}
+
+/**
+ * Volumes attached to nothing. They draw no traffic and appear on no
+ * instance, so without a node of their own they would be invisible — and an
+ * orphaned volume is billed every month until someone deletes it.
+ */
+function buildUnattachedVolumes(data: RegionScanData, region: string, accountId: string): GraphNode[] {
+  return data.volumes
+    .filter((volume) => volume.VolumeId && (volume.Attachments ?? []).length === 0 && volume.State === 'available')
+    .map((volume) => {
+      const tags = toTags(volume.Tags)
+      const id = volume.VolumeId as string
+      return node({
+        id,
+        type: 'ebs-volume',
+        category: 'storage',
+        name: displayName(tags, id),
+        abbr: 'EBS',
+        subtitle: `${volume.Size ?? '?'} GiB ${volume.VolumeType ?? ''} · unattached`.trim(),
+        typeLabel: 'EBS volume',
+        region,
+        az: volume.AvailabilityZone ?? null,
+        parentId: laneId(region),
+        state: 'available',
+        tags,
+        arn: `arn:aws:ec2:${region}:${accountId}:volume/${id}`,
+        consoleId: id,
+        raw: volume,
+        props: props([
+          prop('Volume ID', id),
+          prop('Size', volume.Size !== undefined ? `${volume.Size} GiB` : undefined),
+          prop('Volume type', volume.VolumeType),
+          prop('Attached to', 'nothing'),
+          prop('Availability zone', volume.AvailabilityZone),
+          prop('Encrypted', volume.Encrypted ? 'yes' : 'no'),
+          prop('Created', volume.CreateTime ? new Date(volume.CreateTime).toISOString() : undefined),
+        ]),
+      })
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Subnet classification
 // ---------------------------------------------------------------------------
@@ -427,8 +473,12 @@ export function buildRegionGraph(
 
   // --- ELBv2 -------------------------------------------------------------
   const targetGroupsByLb = new Map<string, TargetGroupRef[]>()
+  const targetGroupArnsByLb = new Map<string, string[]>()
   for (const tg of data.targetGroups) {
     if (!tg.TargetGroupArn) continue
+    for (const lbArn of tg.LoadBalancerArns ?? []) {
+      targetGroupArnsByLb.set(lbArn, [...(targetGroupArnsByLb.get(lbArn) ?? []), tg.TargetGroupArn])
+    }
     const dimension = targetGroupDimension(tg.TargetGroupArn)
     if (!dimension) continue
     const ref = { name: tg.TargetGroupName ?? lastSegment(tg.TargetGroupArn), dimension }
@@ -491,6 +541,10 @@ export function buildRegionGraph(
           prop('Subnets', subnetIds.join(', ')),
           prop('Availability zones', (lb.AvailabilityZones ?? []).map((az) => az.ZoneName).join(', ')),
           prop('IP address type', lb.IpAddressType),
+          // Read by the idle-load-balancer saving. Written only when target
+          // health was read for every target group: a denied or failed call
+          // leaves no entry, and that must not read as "no targets".
+          prop('Registered targets', registeredTargetCount(targetGroupArnsByLb.get(lb.LoadBalancerArn) ?? [], data)),
           prop('Created', lb.CreatedTime ? new Date(lb.CreatedTime).toISOString() : undefined),
         ]),
       }),
@@ -701,6 +755,7 @@ export function buildRegionGraph(
   // Regional services sit in the lane (or in a subnet, when VPC-attached), so
   // they are built before the lane node decides whether it is needed.
   const serviceNodes = [
+    ...buildUnattachedVolumes(data, region, accountId),
     ...buildRegionalServiceNodes(data, region, accountId),
     ...buildWebAclNodes(data, 'REGIONAL'),
     ...(global ? buildBucketNodes(global, region) : []),

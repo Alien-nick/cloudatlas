@@ -200,6 +200,20 @@ describe('get_findings and get_recent_changes', () => {
   })
 })
 
+describe('get_costs', () => {
+  it('separates estimates from actual spend and ranks savings with their fixes', async () => {
+    const ctx = await context()
+    const result = (await tool('get_costs').run({}, ctx)) as {
+      actualSpend: { status: string }
+      estimatedRunRate: { monthlyTotal: number; basis: string }
+      savings: { items: Array<{ monthlySavingsUsd: number | null; fix?: unknown }> }
+    }
+    expect(result.actualSpend.status).toBe('demo')
+    expect(result.estimatedRunRate.monthlyTotal).toBeGreaterThan(0)
+    expect(result.savings.items[0]?.monthlySavingsUsd).toBeGreaterThan(0)
+  })
+})
+
 describe('get_compliance', () => {
   it('names the failing resources for one VPC, with a fix, and the controls it cannot assess', async () => {
     const ctx = await context()

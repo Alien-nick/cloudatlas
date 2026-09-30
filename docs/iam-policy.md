@@ -17,9 +17,9 @@ delete the rest:
 
 | Sid | Actions | When you need it |
 | --- | --- | --- |
-| `CloudAtlasScanReadOnly` | 69 | Always. This is what a scan calls today. |
+| `CloudAtlasScanReadOnly` | 70 | Always. This is what a scan calls today. |
 | `CloudAtlasPlannedReadOnly` | 0 | Attach now to avoid re-attaching at Milestones 3–5. Nothing calls these yet. |
-| `CloudAtlasCostExplorerOptional` | 1 | Only if you set `enableCostExplorer: true`. Cost Explorer bills per request. |
+| `CloudAtlasCostExplorerOptional` | 2 | Only if you set `enableCostExplorer: true`. Cost Explorer bills per request. |
 
 ### The simpler alternative
 
@@ -41,6 +41,8 @@ Without it, the affected panel shows a "missing permission" notice and the rest 
 - `logs:StopQuery`
 - `wafv2:GetSampledRequests`
 - `ce:GetCostAndUsage`
+- `ce:GetCostForecast`
+- `pricing:GetProducts`
 
 Check them yourself with:
 
@@ -48,7 +50,7 @@ Check them yourself with:
 aws iam get-policy-version \
   --policy-arn arn:aws:iam::aws:policy/ReadOnlyAccess \
   --version-id "$(aws iam get-policy --policy-arn arn:aws:iam::aws:policy/ReadOnlyAccess --query 'Policy.DefaultVersionId' --output text)" \
-  --query 'PolicyVersion.Document' | grep -iE 'pi|logs|wafv2|ce'
+  --query 'PolicyVersion.Document' | grep -iE 'pi|logs|wafv2|ce|pricing'
 ```
 
 ## When a permission is missing
@@ -63,7 +65,8 @@ continues, and the affected section of the UI renders a "missing permission:
 
 | Action | Status | Milestone | In ReadOnlyAccess | Why CloudAtlas calls it |
 | --- | --- | --- | --- | --- |
-| `ce:GetCostAndUsage` | active | M6 | unverified | Monthly cost estimates for the Inventory column. Billed per request, so opt-in. |
+| `ce:GetCostAndUsage` | active | M6 | unverified | Actual spend by service, region and day for the Cost view. Billed per request, so opt-in and cached. |
+| `ce:GetCostForecast` | active | M7 | unverified | Projected month-end spend for the Cost view. Billed per request, so opt-in and cached. |
 
 ### `cloudfront`
 
@@ -173,6 +176,12 @@ continues, and the affected section of the UI renders a "missing permission:
 | --- | --- | --- | --- | --- |
 | `pi:DescribeDimensionKeys` | active | M6 | unverified | Top SQL and top wait events during a database spike. |
 | `pi:GetResourceMetrics` | active | M6 | unverified | db.load.avg for RDS instances with Performance Insights enabled. |
+
+### `pricing`
+
+| Action | Status | Milestone | In ReadOnlyAccess | Why CloudAtlas calls it |
+| --- | --- | --- | --- | --- |
+| `pricing:GetProducts` | active | M7 | unverified | On-demand list prices for the instance, database and volume types in the scan, for run-rate estimates and savings. Free. |
 
 ### `rds`
 

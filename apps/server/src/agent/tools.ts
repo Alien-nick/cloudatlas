@@ -3,6 +3,9 @@ import {
   choosePeriod,
   primaryMetricsFor,
   frameworkIdSchema,
+  monthlyByNode,
+  runRateTotal,
+  savingsTotal,
   scoreControls,
   summarizeControls,
   type CloudProvider,
@@ -319,6 +322,52 @@ export const TOOLS: ToolDefinition[] = [
         notAssessed: summaries
           .filter((summary) => summary.status === 'not-assessed')
           .map((summary) => `${summary.control.ref} ${summary.control.title}: ${summary.control.coverageNote ?? ''}`),
+      }
+    },
+  },
+
+  {
+    name: 'get_costs',
+    description:
+      'Where the money goes and how to spend less. Returns actual spend from Cost Explorer (by ' +
+      'service, when enabled), the estimated monthly run-rate per resource from list prices, and ' +
+      'savings ranked by estimated monthly amount, each with its risk and AWS CLI commands for the ' +
+      'user to run. Actual spend and estimates are different numbers: say which one you quote.',
+    input_schema: { type: 'object', properties: {} },
+    run: async (_input, context) => {
+      // Never refresh: that is a billed Cost Explorer call, and the user's to make.
+      const report = await context.provider.getCostReport({ refresh: false })
+      if (!report) return { error: 'No scan has completed yet.' }
+      const graph = context.provider.getGraph()
+      const nameOf = new Map((graph?.nodes ?? []).map((node) => [node.id, node.name]))
+      const byNode = [...monthlyByNode(report.runRate)].sort((a, b) => b[1] - a[1])
+      return {
+        actualSpend: {
+          status: report.actual.status,
+          note: report.actual.message,
+          monthToDate: report.actual.monthToDate,
+          forecastMonthEnd: report.actual.forecastMonthEnd,
+          lastMonth: report.actual.lastMonth,
+          topServices: report.actual.byService.slice(0, 8),
+        },
+        estimatedRunRate: {
+          basis: report.runRate.source,
+          monthlyTotal: Math.round(runRateTotal(report.runRate)),
+          topResources: byNode.slice(0, 12).map(([nodeId, monthly]) => ({ nodeId, name: nameOf.get(nodeId), monthly })),
+          notEstimated: report.runRate.unpriced.length,
+        },
+        savings: {
+          estimatedMonthlyTotal: Math.round(savingsTotal(report.savings)),
+          items: report.savings.map((saving) => ({
+            title: saving.title,
+            resource: nameOf.get(saving.nodeId) ?? saving.nodeId,
+            monthlySavingsUsd: saving.monthlySavingsUsd,
+            note: saving.savingsNote,
+            risk: saving.risk,
+            rationale: saving.rationale,
+            fix: saving.fix,
+          })),
+        },
       }
     },
   },

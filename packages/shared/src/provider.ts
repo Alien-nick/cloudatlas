@@ -1,4 +1,5 @@
 import type { Alarm, CollectorFailure, Finding, Graph, MissingPermission } from './graph.js'
+import type { CostReport } from './cost.js'
 import type { DatabaseLoad, MetricsRequest, MetricsResponse } from './metrics.js'
 import type {
   InsightsRequest,
@@ -80,6 +81,11 @@ export interface CloudProvider {
   getRecentChanges(start: number, end: number): Promise<RecentChange[]>
   /** Performance Insights load breakdown for an RDS node. */
   getDatabaseLoad(nodeId: string, start: number, end: number): Promise<DatabaseLoad>
+
+  /** Actual spend, estimated run-rate and savings for the last scan; null before one. */
+  getCostReport(options?: { refresh?: boolean }): Promise<CostReport | null>
+  /** Cost Explorer bills per request, so turning it on is the user's call. */
+  setCostExplorerEnabled(enabled: boolean): Promise<void>
 
   dispose?(): Promise<void>
 }
