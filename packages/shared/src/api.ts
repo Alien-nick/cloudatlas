@@ -208,3 +208,45 @@ export const configSchema = z.object({
   }),
 })
 export type CloudAtlasConfig = z.infer<typeof configSchema>
+
+/**
+ * Access keys entered in the UI when no AWS profile exists on the machine.
+ *
+ * They travel once, browser to the local server, are checked with
+ * sts:GetCallerIdentity, and are then written to ~/.aws/credentials as a named
+ * profile — exactly where `aws configure` would put them. They are never sent
+ * back, logged, or stored anywhere else.
+ */
+export const addCredentialsRequestSchema = z
+  .object({
+    /** AKIA… for long-term keys, ASIA… for temporary ones. */
+    accessKeyId: z
+      .string()
+      .trim()
+      .regex(/^(AKIA|ASIA)[A-Z0-9]{16}$/, 'An access key ID is 20 characters starting with AKIA or ASIA'),
+    secretAccessKey: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9/+=]{40}$/, 'A secret access key is 40 characters'),
+    sessionToken: z.string().trim().min(1).optional(),
+    region: z.string().regex(/^[a-z]{2}(-gov)?-[a-z]+-\d$/, 'Not an AWS region name').default('us-east-1'),
+    profile: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9_.-]{1,64}$/, 'Use letters, digits, dot, dash or underscore')
+      .default('cloudatlas'),
+  })
+  .refine((keys) => !keys.accessKeyId.startsWith('ASIA') || keys.sessionToken, {
+    message: 'Temporary keys (ASIA…) need their session token as well',
+    path: ['sessionToken'],
+  })
+export type AddCredentialsRequest = z.infer<typeof addCredentialsRequestSchema>
+
+export const addCredentialsResponseSchema = z.object({
+  /** The profile now usable everywhere a profile is. */
+  profile: z.string(),
+  identity: identitySchema,
+  /** Where the keys were written, so the user knows what to remove later. */
+  credentialsPath: z.string(),
+})
+export type AddCredentialsResponse = z.infer<typeof addCredentialsResponseSchema>

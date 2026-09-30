@@ -1,4 +1,6 @@
 import type {
+  AddCredentialsRequest,
+  AddCredentialsResponse,
   Alarm,
   AlarmsResponse,
   ComplianceReport,
@@ -84,6 +86,8 @@ function post<T>(path: string, body: unknown): Promise<T> {
 export const api = {
   info: () => request<ServerInfo>('/api/info'),
   profiles: () => request<Profile[]>('/api/profiles'),
+  /** Verify access keys and save them as a profile. The response never contains them. */
+  addCredentials: (body: AddCredentialsRequest) => post<AddCredentialsResponse>('/api/credentials', body),
   identity: (profile: string) =>
     request<Identity>(`/api/identity?profile=${encodeURIComponent(profile)}`),
   regions: (profile: string) =>

@@ -160,6 +160,12 @@ function emptyRegionStats(): RegionStats {
 
 export interface AwsClientOptions {
   profile: string
+  /**
+   * Keys to use instead of the profile. Only for verifying access keys the
+   * user just entered, before they are saved — every other client resolves
+   * credentials from a profile through the SDK's own chain.
+   */
+  staticCredentials?: { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
   mode: AwsMode
   /** Required in capture mode. */
   writer?: TranscriptWriter
@@ -228,8 +234,17 @@ export class AwsClient {
   constructor(private readonly options: AwsClientOptions) {
     // Replay must never resolve credentials — that is the guarantee that lets
     // this run in CI and on a machine with no AWS config at all.
+    //
+    // ignoreCache: the SDK otherwise caches the credentials file for the life
+    // of the process, so a profile saved from the UI would not resolve until
+    // a restart.
+    const fixed = options.staticCredentials
     this.credentials =
-      options.mode === 'replay' ? null : fromIni({ profile: options.profile })
+      options.mode === 'replay'
+        ? null
+        : fixed
+          ? async () => ({ ...fixed })
+          : fromIni({ profile: options.profile, ignoreCache: true })
   }
 
   get mode(): AwsMode {

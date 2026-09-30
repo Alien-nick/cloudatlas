@@ -2,8 +2,11 @@
 import { computed, ref, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useGraphStore } from '@/stores/graph'
+import type { AddCredentialsResponse } from '@cloudatlas/shared'
+import { api } from '@/lib/api'
 import CaButton from '../ui/CaButton.vue'
 import CaCheckbox from '../ui/CaCheckbox.vue'
+import AccessKeyForm from './AccessKeyForm.vue'
 
 const app = useAppStore()
 const graph = useGraphStore()
@@ -75,6 +78,19 @@ function toggleRegion(region: string): void {
     : [...regions.value, region]
 }
 
+/**
+ * No profile on this machine, in live mode: offer access keys instead of a
+ * dead end. Demo mode always has its fixture profiles, so never shows this.
+ */
+const needsKeys = computed(() => !app.isDemo && app.profiles.length === 0)
+const savedAs = ref<AddCredentialsResponse | null>(null)
+
+async function onKeysSaved(result: AddCredentialsResponse): Promise<void> {
+  savedAs.value = result
+  app.profiles = await api.profiles()
+  app.profile = result.profile
+}
+
 function start(): void {
   if (graph.scanning || regions.value.length === 0 || !app.profile) return
   graph.selectedRegions = [...regions.value]
@@ -89,16 +105,30 @@ function start(): void {
       class="ca-panel-shadow w-[520px] max-w-full overflow-hidden rounded-[12px] border border-border2 bg-panel"
     >
       <div class="border-b border-border px-[22px] pb-4 pt-5">
-        <div class="mb-1 text-[16px] font-semibold">Connect AWS profile</div>
+        <div class="mb-1 text-[16px] font-semibold">
+          {{ needsKeys ? 'Add AWS access keys' : 'Connect AWS profile' }}
+        </div>
         <p class="text-[12.5px] leading-[1.5] text-muted">
           CloudAtlas reads profiles from
           <span class="font-mono text-[11.5px] text-text">~/.aws/config</span> and
-          <span class="font-mono text-[11.5px] text-text">~/.aws/credentials</span> and never stores
-          keys. Scanning is read-only.
+          <span class="font-mono text-[11.5px] text-text">~/.aws/credentials</span>. Scanning is
+          read-only.
         </p>
       </div>
 
-      <div class="flex flex-col gap-[14px] px-[22px] py-[18px]">
+      <div v-if="needsKeys" class="px-[22px] py-[18px]">
+        <AccessKeyForm :regions="availableRegions" @saved="onKeysSaved" />
+      </div>
+
+      <div v-else class="flex flex-col gap-[14px] px-[22px] py-[18px]">
+        <p
+          v-if="savedAs"
+          class="rounded-[7px] border border-border bg-panel2 px-[10px] py-[8px] text-[11.5px] leading-[1.5] text-muted"
+        >
+          <span class="text-ok">✓</span> Keys verified for account
+          <span class="font-mono text-text">{{ savedAs.identity.accountId }}</span> and saved as profile
+          <span class="font-mono text-text">{{ savedAs.profile }}</span>. Pick regions and start the scan.
+        </p>
         <div>
           <div class="mb-[6px] text-[11px] font-semibold text-muted">Profile</div>
           <button

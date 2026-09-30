@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import {
+  addCredentialsRequestSchema,
   insightsRequestSchema,
   logQueryRequestSchema,
   metricsRequestSchema,
@@ -16,6 +17,7 @@ import { runAgent } from '../agent/run.js'
 import { streamMetrics } from '../metrics/stream.js'
 import { launchSsmTerminal, TerminalLaunchError } from '../terminal/ssm.js'
 import { evaluateCompliance } from '../compliance/evaluate.js'
+import { CredentialsError, addAccessKeys } from '../aws/credentials-store.js'
 
 const metricStreamQuery = z.object({
   nodeIds: z.string().min(1),
@@ -83,6 +85,26 @@ export async function registerRoutes(app: FastifyInstance, ctx: RouteContext): P
   }))
 
   app.get('/api/profiles', async () => provider.listProfiles())
+
+  // Access keys typed into the first-run screen, for a machine with no AWS
+  // profile. Verified with STS, then saved as a profile in ~/.aws/credentials;
+  // the response never contains the keys. See aws/credentials-store.ts.
+  app.post('/api/credentials', async (request, reply) => {
+    if (provider.kind !== 'live') {
+      return reply.code(409).send({
+        error: 'Demo mode uses fixture data and has no AWS connection. Start with npm run dev:live.',
+        missingPermission: null,
+        code: 'DEMO_MODE',
+      })
+    }
+    const keys = addCredentialsRequestSchema.parse(request.body)
+    try {
+      return await addAccessKeys(keys)
+    } catch (error) {
+      if (!(error instanceof CredentialsError)) throw error
+      return reply.code(error.status).send({ error: error.message, missingPermission: null, code: error.code })
+    }
+  })
 
   app.get('/api/identity', async (request) => {
     const { profile } = profileQuery.parse(request.query)

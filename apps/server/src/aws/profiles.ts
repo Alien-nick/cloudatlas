@@ -6,8 +6,10 @@ import type { Profile } from '@cloudatlas/shared'
 /**
  * Keys we are willing to read out of the AWS config files. Credentials
  * (aws_access_key_id, aws_secret_access_key, aws_session_token) are
- * deliberately absent: CloudAtlas never reads, stores or forwards them — the
- * SDK's own credential chain resolves them inside this process.
+ * deliberately absent: CloudAtlas never reads or forwards them — the SDK's
+ * own credential chain resolves them inside this process. The one exception
+ * is writing: keys the user enters when no profile exists are saved as a new
+ * profile by credentials-store.ts, and are never read back out.
  */
 const ALLOWED_KEYS = new Set(['region', 'sso_start_url', 'sso_session', 'sso_account_id'])
 
