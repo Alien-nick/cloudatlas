@@ -6,6 +6,7 @@ import type {
   ComplianceReport,
   CostReport,
   SimChange,
+  ProjectTemplateSummary,
   Simulated,
   SimulationScope,
   SimulationExport,
@@ -115,9 +116,17 @@ export const api = {
   setCostExplorer: (enabled: boolean) => post<{ enabled: boolean }>('/api/cost/explorer', { enabled }),
 
   simulations: () => request<SimulationSummary[]>('/api/simulations'),
+  projects: () => request<SimulationSummary[]>('/api/projects'),
+  projectTemplates: () => request<ProjectTemplateSummary[]>('/api/project-templates'),
+  createProject: (body: { name: string; description: string; region: string; templateId: string | null }) =>
+    post<Simulated>('/api/projects', body),
+  saveProjectTemplate: (id: string, body: { name: string; description: string }) =>
+    post<ProjectTemplateSummary>(`/api/projects/${encodeURIComponent(id)}/template`, body),
+  deleteProjectTemplate: (id: string) =>
+    request<null>(`/api/project-templates/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   createSimulation: (name: string, scope: SimulationScope | null) => post<Simulated>('/api/simulations', { name, scope }),
   simulation: (id: string) => request<Simulated>(`/api/simulations/${encodeURIComponent(id)}`),
-  saveSimulation: (id: string, patch: { name?: string; changes?: SimChange[] }) =>
+  saveSimulation: (id: string, patch: { name?: string; description?: string; changes?: SimChange[] }) =>
     request<Simulated>(`/api/simulations/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(patch) }),
   deleteSimulation: (id: string) => request<null>(`/api/simulations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   rebaseSimulation: (id: string) => post<Simulated>(`/api/simulations/${encodeURIComponent(id)}/rebase`, {}),

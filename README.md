@@ -26,6 +26,8 @@ a mutating AWS API.
   AWS Foundational Security Best Practices — see [Compliance](#compliance).
 - **Breaks down cost.** Actual spend from Cost Explorer, an estimated run-rate per resource and VPC
   from AWS list prices, and savings with copy-paste fixes — see [Cost](#cost).
+- **Designs new projects.** Sketch architecture from scratch or from a template, with cost,
+  compliance and exposure estimated as you go — see [Projects](#projects).
 - **Simulates changes.** Clone the environment into a project, add, connect, edit and remove
   resources, and see the cost, compliance and internet-exposure impact before building anything —
   then export Terraform or an AWS CLI script — see [Simulations](#simulations).
@@ -214,6 +216,20 @@ previous-generation instance types, Graviton equivalents, load balancers with no
 gateways and Multi-AZ databases in resources tagged non-production, and x86 Lambda functions. The
 total counts only the largest saving per resource, so overlapping suggestions never promise money
 twice. As with compliance fixes, CloudAtlas never runs the commands.
+
+## Projects
+
+**Projects** are for designing new architecture from scratch — no scan or AWS account needed. Start
+from a blank region or a template, then sketch with the same drag-and-drop editor as simulations:
+
+- **Templates:** *Three-tier web app*, *Containerised API*, *Serverless backend* and *Network
+  foundation*, each a complete, connected design you can change. Any project can be saved with
+  **Save as template** and reused; saved templates are placed in whichever region the new project uses.
+- **Impact:** the estimated monthly cost of the whole design, what would be reachable from the
+  internet, and its score against the compliance frameworks you selected.
+- **Export:** Terraform or an AWS CLI script to build it, as for simulations.
+
+Projects and saved templates are stored locally with simulations.
 
 ## Simulations
 

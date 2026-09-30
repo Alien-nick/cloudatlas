@@ -17,6 +17,7 @@ import AnalyticsView from '@/components/views/AnalyticsView.vue'
 import ComplianceView from '@/components/views/ComplianceView.vue'
 import CostView from '@/components/views/CostView.vue'
 import SimulateView from '@/components/views/SimulateView.vue'
+import ProjectsView from '@/components/views/ProjectsView.vue'
 import LogsView from '@/components/views/LogsView.vue'
 import ResourceDetailView from '@/components/views/ResourceDetailView.vue'
 
@@ -136,6 +137,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
           :description="app.error"
         />
 
+        <!-- Projects are designed from scratch, so they need no scan. -->
+        <ProjectsView v-else-if="app.view === 'projects'" />
         <FirstRun v-else-if="showFirstRun || !graph.graph" />
 
         <CanvasView v-else-if="isCanvasView" />
@@ -150,7 +153,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
       </main>
 
       <DetailPanel
-        v-if="!showFirstRun && graph.graph && app.panelOpen && app.view !== 'resource' && app.view !== 'simulate'"
+        v-if="!showFirstRun && graph.graph && app.panelOpen && app.view !== 'resource' && app.view !== 'simulate' && app.view !== 'projects'"
       />
       <AgentPanel v-if="!showFirstRun && graph.graph" />
     </div>

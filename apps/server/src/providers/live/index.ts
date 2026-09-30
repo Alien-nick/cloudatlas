@@ -447,7 +447,7 @@ export class LiveProvider implements CloudProvider {
   }
 
   async estimateRunRates(graphs: Graph[]): Promise<RunRate[]> {
-    const profile = graphs[0]?.profile ?? this.getGraph()?.profile
+    const profile = graphs[0]?.profile || this.getGraph()?.profile
     const aws = this.client(this.profileOrThrow(profile))
     const { book, failure } = await loadPriceBook(aws, graphs.flatMap((graph) => neededPrices(graph)))
     return graphs.map((graph) => estimateRunRate(graph, book, failure))

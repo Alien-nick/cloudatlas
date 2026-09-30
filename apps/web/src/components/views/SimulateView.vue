@@ -5,12 +5,7 @@ import { useGraphStore } from '@/stores/graph'
 import { useSimulationStore } from '@/stores/simulation'
 import { relativeTime } from '@/lib/utils'
 import CaEmptyState from '../ui/CaEmptyState.vue'
-import AddPalette from '../simulation/AddPalette.vue'
-import ChangeLog from '../simulation/ChangeLog.vue'
-import ExportDialog from '../simulation/ExportDialog.vue'
-import ImpactPanel from '../simulation/ImpactPanel.vue'
-import SelectionPanel from '../simulation/SelectionPanel.vue'
-import SimCanvas from '../simulation/SimCanvas.vue'
+import SimulationEditor from '../simulation/SimulationEditor.vue'
 
 /**
  * Simulations: a frozen copy of the scanned environment to design against.
@@ -23,9 +18,6 @@ const graph = useGraphStore()
 const sim = useSimulationStore()
 
 const newName = ref('')
-const renaming = ref(false)
-const nameDraft = ref('')
-const exporting = ref<'cli' | 'terraform' | null>(null)
 const confirmDelete = ref<string | null>(null)
 
 onMounted(() => void sim.loadList())
@@ -76,23 +68,11 @@ async function create(): Promise<void> {
   newName.value = ''
 }
 
-function startRename(): void {
-  nameDraft.value = sim.current?.simulation.name ?? ''
-  renaming.value = true
-}
-
-async function finishRename(): Promise<void> {
-  if (nameDraft.value.trim()) await sim.rename(nameDraft.value.trim())
-  renaming.value = false
-}
-
-const headerButton =
-  'h-[26px] cursor-pointer rounded-[6px] border border-border2 bg-panel2 px-[10px] text-[11.5px] text-muted hover:text-text'
 </script>
 
 <template>
   <!-- ======================= List ======================= -->
-  <div v-if="!sim.current" class="min-h-0 flex-1 overflow-y-auto">
+  <div v-if="sim.current?.simulation.kind !== 'simulation'" class="min-h-0 flex-1 overflow-y-auto">
     <div class="mx-auto w-full max-w-[900px] px-6 py-6">
       <h1 class="text-[20px] font-semibold">Simulations</h1>
       <p class="mt-1 max-w-[720px] text-[12.5px] leading-[1.6] text-muted">
@@ -189,68 +169,5 @@ const headerButton =
   </div>
 
   <!-- ======================= Editor ======================= -->
-  <div v-else class="flex min-h-0 flex-1 flex-col">
-    <div class="flex h-[40px] shrink-0 items-center gap-[10px] border-b border-border bg-panel px-[14px]">
-      <button type="button" class="cursor-pointer text-[12px] text-muted hover:text-text" @click="sim.close()">‹ Simulations</button>
-      <input
-        v-if="renaming"
-        v-model="nameDraft"
-        class="h-[26px] w-[260px] rounded-[6px] border border-border2 bg-panel2 px-[8px] text-[12.5px] outline-none"
-        autofocus
-        @keydown.enter="finishRename"
-        @blur="finishRename"
-      />
-      <button v-else type="button" class="cursor-text text-[13px] font-semibold" title="Rename" @click="startRename">
-        {{ sim.current.simulation.name }}
-      </button>
-      <span class="text-[11px] text-faint">
-        {{ scopeLabel(sim.current.simulation.scope) }} · cloned from the scan of
-        {{ relativeTime(sim.current.simulation.baseScannedAt) }}
-      </span>
-      <div class="ml-auto flex gap-[6px]">
-        <button
-          type="button"
-          :class="headerButton"
-          title="Replace the copy with the latest scan, keeping every change"
-          @click="sim.rebase()"
-        >
-          Refresh from latest scan
-        </button>
-        <button type="button" :class="headerButton" @click="exporting = 'cli'">AWS CLI</button>
-        <button type="button" :class="headerButton" @click="exporting = 'terraform'">Terraform</button>
-      </div>
-    </div>
-
-    <div class="flex min-h-0 flex-1">
-      <aside class="w-[300px] shrink-0 overflow-y-auto border-r border-border bg-panel px-[14px] py-[12px]">
-        <SelectionPanel v-if="sim.selected" :key="sim.selected.id" />
-        <template v-else>
-          <section class="mb-5">
-            <div class="ca-eyebrow mb-2">Add</div>
-            <AddPalette />
-            <p class="mt-[7px] text-[10.5px] leading-[1.45] text-faint">
-              Drag onto a subnet, VPC or region on the diagram. Or click a subnet or VPC first, then add inside it.
-              Settings can be changed once it is placed.
-            </p>
-          </section>
-          <ChangeLog />
-        </template>
-        <p v-if="sim.error" class="mt-3 text-[11.5px] text-bad">{{ sim.error }}</p>
-      </aside>
-
-      <SimCanvas :key="sim.current.simulation.id" />
-
-      <aside class="w-[340px] shrink-0 overflow-y-auto border-l border-border bg-panel px-[14px] py-[12px]">
-        <ImpactPanel />
-      </aside>
-    </div>
-
-    <ExportDialog
-      v-if="exporting"
-      :simulation-id="sim.current.simulation.id"
-      :name="sim.current.simulation.name"
-      :format="exporting"
-      @close="exporting = null"
-    />
-  </div>
+  <SimulationEditor v-else />
 </template>

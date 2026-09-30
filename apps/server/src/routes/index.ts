@@ -1,9 +1,17 @@
+import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { z } from 'zod'
 import {
   addCredentialsRequestSchema,
   simChangeSchema,
   simulationScopeSchema,
+  builtInTemplates,
+  inRegion,
+  summarizeTemplate,
+  templateFromChanges,
+  type ProjectTemplate,
+  type RunRate,
+  type SimChange,
   insightsRequestSchema,
   logQueryRequestSchema,
   metricsRequestSchema,
@@ -24,6 +32,7 @@ import { applySimulation } from '../simulation/apply.js'
 import { exportCli, exportTerraform } from '../simulation/export.js'
 import { simulationImpact } from '../simulation/impact.js'
 import { scopeGraph } from '../simulation/scope.js'
+import { emptyGraph } from '../simulation/project.js'
 import type { SimulationStore } from '../simulation/store.js'
 
 const metricStreamQuery = z.object({
@@ -82,7 +91,19 @@ const simulationCreateSchema = z.object({
 })
 const simulationUpdateSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
+  description: z.string().max(500).optional(),
   changes: z.array(simChangeSchema).max(500).optional(),
+})
+const projectCreateSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  description: z.string().max(500).default(''),
+  region: z.string().regex(/^[a-z]{2}(-[a-z]+)+-\d$/, 'Not an AWS region'),
+  /** A built-in or saved template to start from; omitted for a blank canvas. */
+  templateId: z.string().nullable().optional(),
+})
+const templateSaveSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  description: z.string().max(500).default(''),
 })
 const simulationExportQuery = z.object({ format: z.enum(['cli', 'terraform']).default('cli') })
 const alarmsQuery = z.object({ state: z.string().optional() })
@@ -218,14 +239,14 @@ export async function registerRoutes(app: FastifyInstance, ctx: RouteContext): P
 
   app.get('/api/simulations', async () => {
     const graph = provider.getGraph()
-    return graph ? simulations.list(graph.accountId) : []
+    return graph ? simulations.list({ kind: 'simulation', accountId: graph.accountId }) : []
   })
 
   app.post('/api/simulations', async (request, reply) => {
     const { name, scope } = simulationCreateSchema.parse(request.body)
     const graph = provider.getGraph()
     if (!graph) return reply.code(409).send({ error: 'Scan an account before cloning it.', missingPermission: null, code: 'NO_SCAN' })
-    const simulation = simulations.create(name, scopeGraph(graph, scope ?? null), Date.now(), scope ?? null)
+    const simulation = simulations.create(name, scopeGraph(graph, scope ?? null), Date.now(), { scope: scope ?? null })
     return loadSimulation(simulation.id)!.simulated
   })
 
@@ -250,6 +271,9 @@ export async function registerRoutes(app: FastifyInstance, ctx: RouteContext): P
     if (!graph) return reply.code(409).send({ error: 'No scan to rebase onto.', missingPermission: null, code: 'NO_SCAN' })
     const current = simulations.get(request.params.id)
     if (!current) return notFound(reply)
+    if (current.simulation.kind === 'project') {
+      return reply.code(409).send({ error: 'A project is not a copy of a scan.', missingPermission: null, code: 'NOT_A_SIMULATION' })
+    }
     simulations.rebase(request.params.id, scopeGraph(graph, current.simulation.scope))
     return loadSimulation(request.params.id)!.simulated
   })
@@ -257,8 +281,16 @@ export async function registerRoutes(app: FastifyInstance, ctx: RouteContext): P
   app.get<{ Params: { id: string } }>('/api/simulations/:id/impact', async (request, reply) => {
     const loaded = loadSimulation(request.params.id)
     if (!loaded) return notFound(reply)
-    const [before, after] = await provider.estimateRunRates([loaded.stored.base, loaded.simulated.graph])
-    return simulationImpact(loaded.stored.base, loaded.simulated, [before!, after!])
+    let rates: RunRate[]
+    try {
+      rates = await provider.estimateRunRates([loaded.stored.base, loaded.simulated.graph])
+    } catch (error) {
+      // A project can be sketched before any account is connected; the rest
+      // of its impact does not need prices, so it is still worth showing.
+      const message = `Prices could not be looked up: ${(error as Error).message}. Connect an AWS profile to estimate cost.`
+      rates = [0, 1].map(() => ({ source: 'Not priced', lines: [], unpriced: [], message }))
+    }
+    return simulationImpact(loaded.stored.base, loaded.simulated, [rates[0]!, rates[1]!])
   })
 
   app.get<{ Params: { id: string } }>('/api/simulations/:id/export', async (request, reply) => {
@@ -268,6 +300,49 @@ export async function registerRoutes(app: FastifyInstance, ctx: RouteContext): P
     return format === 'terraform'
       ? exportTerraform(loaded.stored.base, loaded.simulated)
       : exportCli(loaded.stored.base, loaded.simulated)
+  })
+
+  // ---- projects ---------------------------------------------------------
+  // Designs from scratch: a simulation on an empty snapshot, optionally
+  // started from a template. Edited, priced and exported through the
+  // simulation routes above.
+
+  const templates = (): ProjectTemplate[] => [...builtInTemplates(), ...simulations.listTemplates()]
+
+  app.get('/api/projects', async () => simulations.list({ kind: 'project' }))
+
+  app.get('/api/project-templates', async () => templates().map(summarizeTemplate))
+
+  app.post('/api/projects', async (request, reply) => {
+    const body = projectCreateSchema.parse(request.body)
+    let changes: SimChange[] = []
+    if (body.templateId) {
+      const template = templates().find((candidate) => candidate.id === body.templateId)
+      if (!template) return reply.code(404).send({ error: 'No such template', missingPermission: null, code: 'NOT_FOUND' })
+      changes = inRegion(template.changes, body.region)
+    }
+    const base = emptyGraph(body.region, provider.getGraph()?.profile ?? '')
+    const project = simulations.create(body.name, base, Date.now(), {
+      kind: 'project',
+      description: body.description,
+      templateId: body.templateId ?? null,
+      changes,
+    })
+    return loadSimulation(project.id)!.simulated
+  })
+
+  /** Save a project's design as a template for new projects. */
+  app.post<{ Params: { id: string } }>('/api/projects/:id/template', async (request, reply) => {
+    const { name, description } = templateSaveSchema.parse(request.body)
+    const stored = simulations.get(request.params.id)
+    if (!stored) return notFound(reply)
+    const template = templateFromChanges(`saved-${randomUUID()}`, name, description, stored.simulation.changes, Date.now())
+    simulations.saveTemplate(template)
+    return summarizeTemplate(template)
+  })
+
+  app.delete<{ Params: { id: string } }>('/api/project-templates/:id', async (request, reply) => {
+    return simulations.removeTemplate(request.params.id) ? reply.code(204).send() : notFound(reply)
   })
 
   // ---- metrics ----------------------------------------------------------

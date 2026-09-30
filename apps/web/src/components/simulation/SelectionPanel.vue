@@ -86,7 +86,7 @@ const button =
         <div class="text-[11px] text-muted">
           {{ node.typeLabel }} ·
           <span :class="status === 'added' ? 'text-ok' : status === 'changed' ? 'text-warn' : 'text-faint'">
-            {{ status === 'added' ? 'new in this simulation' : status === 'changed' ? 'edited' : 'as scanned' }}
+            {{ sim.isProject ? 'planned' : status === 'added' ? 'new in this simulation' : status === 'changed' ? 'edited' : 'as scanned' }}
           </span>
         </div>
       </div>
@@ -164,7 +164,7 @@ const button =
         class="cursor-pointer text-[11.5px] text-muted hover:text-bad"
         @click="confirmRemove = true"
       >
-        Remove from the simulation…
+        Remove from the {{ sim.isProject ? 'project' : 'simulation' }}…
       </button>
       <div v-else class="flex items-center gap-2 text-[11.5px]">
         <span class="text-muted">Remove {{ node.name }}{{ isContainerType(node.type) ? ' and everything in it' : '' }}?</span>

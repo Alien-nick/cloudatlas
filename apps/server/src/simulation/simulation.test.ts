@@ -2,10 +2,11 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { Graph, SimChange, Simulation } from '@cloudatlas/shared'
+import { builtInTemplates, inRegion, templateFromChanges, type Graph, type SimChange, type Simulation } from '@cloudatlas/shared'
 import { evaluateCompliance } from '../compliance/evaluate.js'
 import { DemoProvider } from '../providers/demo/index.js'
 import { scopeGraph } from './scope.js'
+import { PROJECT_ACCOUNT, emptyGraph } from './project.js'
 import { applySimulation, settingsOf } from './apply.js'
 import { exportCli, exportTerraform } from './export.js'
 import { simulationImpact } from './impact.js'
@@ -33,6 +34,9 @@ function simulate(changes: SimChange[]): Simulation {
     updatedAt: 0,
     baseScannedAt: base.scannedAt,
     scope: null,
+    kind: 'simulation',
+    description: '',
+    templateId: null,
     changes,
   }
 }
@@ -206,8 +210,9 @@ describe('the store', () => {
       const store = make()
       const created = store.create('Plan', base, 10)
       store.update(created.id, { changes: [jumpBox] }, 20)
-      expect(store.list(base.accountId).map((entry) => [entry.name, entry.changeCount])).toEqual([['Plan', 1]])
-      expect(store.list('someone-else')).toEqual([])
+      expect(store.list({ kind: 'simulation', accountId: base.accountId }).map((entry) => [entry.name, entry.changeCount])).toEqual([['Plan', 1]])
+      expect(store.list({ kind: 'simulation', accountId: 'someone-else' })).toEqual([])
+      expect(store.list({ kind: 'project' })).toEqual([])
 
       const newer = { ...base, scannedAt: base.scannedAt + 1000 }
       store.rebase(created.id, newer, 30)
@@ -218,6 +223,29 @@ describe('the store', () => {
 
       expect(store.remove(created.id)).toBe(true)
       expect(store.get(created.id)).toBeNull()
+    })
+
+    it(`${label}: keeps projects apart from simulations, and saves templates`, () => {
+      const store = make()
+      store.create('Sim', base, 10)
+      const project = store.create('Greenfield', emptyGraph('eu-west-1', ''), 20, {
+        kind: 'project',
+        description: 'New payments stack',
+        templateId: 'serverless',
+      })
+      expect(store.list({ kind: 'project' }).map((entry) => [entry.name, entry.description, entry.templateId])).toEqual([
+        ['Greenfield', 'New payments stack', 'serverless'],
+      ])
+      expect(store.list({ kind: 'simulation', accountId: base.accountId }).map((entry) => entry.name)).toEqual(['Sim'])
+      store.update(project.id, { description: 'Payments v2' }, 30)
+      expect(store.get(project.id)!.simulation.description).toBe('Payments v2')
+
+      const template = templateFromChanges('saved-1', 'Mine', '', builtInTemplates()[0]!.changes, 40)
+      store.saveTemplate(template)
+      expect(store.listTemplates().map((entry) => entry.name)).toEqual(['Mine'])
+      expect(store.getTemplate('saved-1')!.changes).toEqual(template.changes)
+      expect(store.removeTemplate('saved-1')).toBe(true)
+      expect(store.listTemplates()).toEqual([])
     })
   }
 })
@@ -241,5 +269,52 @@ describe('scopeGraph', () => {
     const outside = base.nodes.find((node) => node.type === 's3')!
     expect(scopeGraph(base, { vpcIds: [vpc.id], includeOutside: false }).nodes.some((n) => n.id === outside.id)).toBe(false)
     expect(scopeGraph(base, { vpcIds: [vpc.id], includeOutside: true }).nodes.some((n) => n.id === outside.id)).toBe(true)
+  })
+})
+
+describe('projects', () => {
+  const project = (changes: SimChange[], region = 'eu-west-1') => ({
+    ...simulate(changes),
+    accountId: PROJECT_ACCOUNT,
+    kind: 'project' as const,
+    region,
+  })
+
+  it('starts from an empty region the palette can drop into', () => {
+    const empty = emptyGraph('eu-west-1', '')
+    expect(empty.nodes.map((node) => node.type)).toEqual(['region', 'lane'])
+    const result = applySimulation(empty, project([]))
+    expect(result.problems).toEqual([])
+  })
+
+  for (const template of builtInTemplates('eu-west-1')) {
+    it(`builds the ${template.name} template without problems, and exports it`, () => {
+      const empty = emptyGraph('eu-west-1', '')
+      const result = applySimulation(empty, project(template.changes))
+      expect(result.problems).toEqual([])
+      const added = Object.values(result.status).filter((status) => status === 'added').length
+      expect(added).toBe(template.resourceCount)
+      expect(result.graph.nodes.every((node) => node.region === 'eu-west-1')).toBe(true)
+      expect(exportTerraform(empty, result).text.length).toBeGreaterThan(0)
+      expect(exportCli(empty, result).text).not.toContain('undefined')
+    })
+  }
+
+  it('moves a saved design to the region of the new project', () => {
+    const [template] = builtInTemplates('us-east-1')
+    const moved = inRegion(template!.changes, 'ap-southeast-2')
+    const result = applySimulation(emptyGraph('ap-southeast-2', ''), project(moved, 'ap-southeast-2'))
+    expect(result.problems).toEqual([])
+    expect(result.graph.nodes.some((node) => node.region === 'us-east-1')).toBe(false)
+  })
+
+  it('compares a design against nothing: none of it existed before', () => {
+    const empty = emptyGraph('eu-west-1', '')
+    const result = applySimulation(empty, project(builtInTemplates('eu-west-1')[0]!.changes))
+    const zero = { source: 'test', lines: [], unpriced: [], message: null }
+    const impact = simulationImpact(empty, result, [zero, zero])
+    expect(impact.cost.before).toBe(0)
+    // Every resource is new, so any exposure it has is new too.
+    expect(impact.exposure.noLongerReachable).toEqual([])
   })
 })

@@ -56,23 +56,30 @@ function pct(value: number | null): string {
 
       <section class="rounded-[8px] border border-border bg-panel2 px-[11px] py-[10px]">
         <div class="mb-[6px] flex items-baseline gap-2">
-          <span class="text-[12px] font-semibold">Monthly cost</span>
+          <span class="text-[12px] font-semibold">{{ sim.isProject ? 'Estimated monthly cost' : 'Monthly cost' }}</span>
+          <span v-if="sim.isProject" class="ml-auto font-mono text-[14px] font-semibold">{{ money(impact.cost.after) }}</span>
           <span
+            v-else
             class="ml-auto font-mono text-[14px] font-semibold"
             :class="delta > 0.005 ? 'text-bad' : delta < -0.005 ? 'text-ok' : 'text-text'"
           >
             {{ delta > 0.005 ? '+' : '' }}{{ money(delta) }}
           </span>
         </div>
-        <div class="font-mono text-[11px] text-muted">{{ money(impact.cost.before) }} → {{ money(impact.cost.after) }} estimated</div>
+        <div v-if="!sim.isProject" class="font-mono text-[11px] text-muted">{{ money(impact.cost.before) }} → {{ money(impact.cost.after) }} estimated</div>
         <p v-if="impact.cost.message" class="mt-[6px] text-[11px] text-warn">{{ impact.cost.message }}</p>
         <ul class="mt-[6px] flex flex-col gap-[3px]">
           <li v-for="line in impact.cost.lines" :key="line.nodeId" class="flex gap-2 text-[11px]">
             <button type="button" class="min-w-0 flex-1 cursor-pointer truncate text-left hover:underline" @click="sim.focus(line.nodeId)">
               {{ line.name }}
             </button>
-            <span class="text-faint">{{ line.change }}</span>
-            <span class="font-mono">{{ line.after - line.before > 0 ? '+' : '' }}{{ money(line.after - line.before) }}</span>
+            <template v-if="sim.isProject">
+              <span class="font-mono">{{ money(line.after) }}</span>
+            </template>
+            <template v-else>
+              <span class="text-faint">{{ line.change }}</span>
+              <span class="font-mono">{{ line.after - line.before > 0 ? '+' : '' }}{{ money(line.after - line.before) }}</span>
+            </template>
           </li>
         </ul>
         <p v-if="impact.cost.notEstimated.length" class="mt-[6px] text-[10.5px] text-faint">
@@ -84,7 +91,7 @@ function pct(value: number | null): string {
       <section class="rounded-[8px] border border-border bg-panel2 px-[11px] py-[10px]">
         <div class="mb-[6px] text-[12px] font-semibold">Internet exposure</div>
         <p v-if="!impact.exposure.newlyReachable.length && !impact.exposure.noLongerReachable.length" class="text-[11.5px] text-muted">
-          No new routes from the internet.
+          {{ sim.isProject ? 'Nothing is reachable from the internet.' : 'No new routes from the internet.' }}
         </p>
         <div v-if="routesToExisting.length" class="mb-[8px]">
           <div class="mb-[3px] text-[11px] font-semibold text-bad">New routes to existing resources</div>
@@ -97,7 +104,7 @@ function pct(value: number | null): string {
           </ul>
         </div>
         <div v-if="routesToNew.length">
-          <div class="mb-[3px] text-[11px] font-semibold text-muted">Reachable new resources</div>
+          <div class="mb-[3px] text-[11px] font-semibold text-muted">{{ sim.isProject ? 'Reachable from the internet' : 'Reachable new resources' }}</div>
           <ul class="flex flex-col gap-[2px]">
             <li v-for="route in routesToNew" :key="route.nodeId" class="font-mono text-[10.5px] text-faint">
               internet → {{ route.path.map(nameOf).join(' → ') }}
@@ -113,12 +120,17 @@ function pct(value: number | null): string {
       <section v-for="entry in frameworks" :key="entry.framework" class="rounded-[8px] border border-border bg-panel2 px-[11px] py-[10px]">
         <div class="mb-[6px] flex items-baseline gap-2">
           <span class="text-[12px] font-semibold">{{ entry.frameworkName }}</span>
-          <span class="ml-auto font-mono text-[12px]">
+          <span v-if="sim.isProject" class="ml-auto font-mono text-[12px]" :class="entry.newGaps.length ? 'text-warn' : 'text-ok'">
+            {{ pct(entry.after) }}
+          </span>
+          <span v-else class="ml-auto font-mono text-[12px]">
             {{ pct(entry.before) }} →
             <span :class="(entry.after ?? 0) < (entry.before ?? 0) ? 'text-bad' : (entry.after ?? 0) > (entry.before ?? 0) ? 'text-ok' : ''">{{ pct(entry.after) }}</span>
           </span>
         </div>
-        <p v-if="!entry.newGaps.length && !entry.fixed.length" class="text-[11px] text-muted">No change.</p>
+        <p v-if="!entry.newGaps.length && !entry.fixed.length" class="text-[11px] text-muted">
+          {{ sim.isProject ? (entry.after === null ? 'Nothing to assess yet.' : 'No gaps.') : 'No change.' }}
+        </p>
         <ul class="flex flex-col gap-[3px]">
           <li v-for="gap in entry.newGaps" :key="`gap-${gap.checkId}-${gap.nodeId}`" class="text-[11px]">
             <span class="text-bad">✕</span> {{ gap.checkTitle }} —

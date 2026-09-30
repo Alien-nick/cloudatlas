@@ -262,6 +262,16 @@ export const simulationSchema = z.object({
   baseScannedAt: z.number(),
   /** Reapplied on rebase, so a refreshed snapshot covers the same networks. */
   scope: simulationScopeSchema.nullable().default(null),
+  /**
+   * `simulation`: a scanned environment plus changes. `project`: a design
+   * from scratch — the same thing on an empty snapshot, so every engine and
+   * export works on it unchanged.
+   */
+  kind: z.enum(['simulation', 'project']).default('simulation'),
+  /** What a project is for, in the user's words. */
+  description: z.string().max(500).default(''),
+  /** The template a project started from, if any. */
+  templateId: z.string().nullable().default(null),
   changes: z.array(simChangeSchema),
 })
 export type Simulation = z.infer<typeof simulationSchema>

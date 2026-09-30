@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type {
+  ProjectTemplateSummary,
   SimChange,
   SimResource,
   SimResourceType,
@@ -22,6 +23,9 @@ import { placeResource } from '@/lib/simPlacement'
  */
 export const useSimulationStore = defineStore('simulation', () => {
   const list = ref<SimulationSummary[]>([])
+  /** Designs from scratch; the same editor, on an empty snapshot. */
+  const projects = ref<SimulationSummary[]>([])
+  const templates = ref<ProjectTemplateSummary[]>([])
   const current = ref<Simulated | null>(null)
   const impact = ref<SimulationImpact | null>(null)
   const selectedId = ref<string | null>(null)
@@ -41,6 +45,8 @@ export const useSimulationStore = defineStore('simulation', () => {
   const saving = ref(false)
 
   const changes = computed(() => current.value?.simulation.changes ?? [])
+  /** A design from scratch rather than a copy of a scan: everything in it is new. */
+  const isProject = computed(() => current.value?.simulation.kind === 'project')
   const selected = computed(() => current.value?.graph.nodes.find((node) => node.id === selectedId.value) ?? null)
 
   async function guard<T>(run: () => Promise<T>): Promise<T | null> {
@@ -57,6 +63,17 @@ export const useSimulationStore = defineStore('simulation', () => {
     loading.value = true
     const result = await guard(() => api.simulations())
     if (result) list.value = result
+    loading.value = false
+  }
+
+  async function loadProjects(): Promise<void> {
+    loading.value = true
+    const [projectList, templateList] = await Promise.all([
+      guard(() => api.projects()),
+      guard(() => api.projectTemplates()),
+    ])
+    if (projectList) projects.value = projectList
+    if (templateList) templates.value = templateList
     loading.value = false
   }
 
@@ -97,10 +114,38 @@ export const useSimulationStore = defineStore('simulation', () => {
   }
 
   function close(): void {
+    const kind = current.value?.simulation.kind
     current.value = null
     impact.value = null
     selectedId.value = null
-    void loadList()
+    void (kind === 'project' ? loadProjects() : loadList())
+  }
+
+  async function createProject(body: { name: string; description: string; region: string; templateId: string | null }): Promise<void> {
+    impact.value = null
+    selectedId.value = null
+    adopt(await guard(() => api.createProject(body)))
+    // Fit the whole starting design into view rather than one resource.
+    focusRequest.value = null
+  }
+
+  async function saveAsTemplate(name: string, description: string): Promise<ProjectTemplateSummary | null> {
+    const id = current.value?.simulation.id
+    if (!id) return null
+    const saved = await guard(() => api.saveProjectTemplate(id, { name, description }))
+    if (saved) templates.value = [saved, ...templates.value]
+    return saved
+  }
+
+  async function deleteTemplate(id: string): Promise<void> {
+    // A delete answers with no body, so success is the absence of an error.
+    await guard(() => api.deleteProjectTemplate(id))
+    if (!error.value) templates.value = templates.value.filter((template) => template.id !== id)
+  }
+
+  async function describe(description: string): Promise<void> {
+    const id = current.value?.simulation.id
+    if (id) adopt(await guard(() => api.saveSimulation(id, { description })))
   }
 
   async function save(next: SimChange[]): Promise<void> {
@@ -181,13 +226,21 @@ export const useSimulationStore = defineStore('simulation', () => {
   }
 
   async function destroy(id: string): Promise<void> {
+    const isProject = projects.value.some((project) => project.id === id)
     await guard(() => api.deleteSimulation(id))
     if (current.value?.simulation.id === id) close()
-    else await loadList()
+    else await (isProject ? loadProjects() : loadList())
   }
 
   return {
     list,
+    projects,
+    templates,
+    loadProjects,
+    createProject,
+    saveAsTemplate,
+    deleteTemplate,
+    describe,
     current,
     impact,
     selectedId,
@@ -203,6 +256,7 @@ export const useSimulationStore = defineStore('simulation', () => {
     impactLoading,
     error,
     changes,
+    isProject,
     loadList,
     loadImpact,
     create,

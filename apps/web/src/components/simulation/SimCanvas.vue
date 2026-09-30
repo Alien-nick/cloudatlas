@@ -31,6 +31,8 @@ let generation = 0
 let fitPending = true
 
 const graph = computed(() => sim.current?.graph ?? null)
+/** Nothing but the region: a new, blank project. */
+const isEmpty = computed(() => (graph.value?.nodes ?? []).every((node) => node.type === 'region' || node.type === 'lane'))
 const structureKey = computed(
   () =>
     `${graph.value?.nodes.map((n) => n.id).join('|')}##${graph.value?.edges.map((e) => e.id).join('|')}##${[...collapsed.value].join('|')}`,
@@ -99,7 +101,8 @@ function restyle(glide = false): void {
     highlightedIds: null,
     showEdgeLabels: true,
     securityView: false,
-    simStatus: sim.current?.status ?? {},
+    // In a project everything is new, so the NEW badge would be on every tile.
+    simStatus: sim.isProject ? {} : (sim.current?.status ?? {}),
   })
   // Always set, even empty: Vue Flow merges node updates, so a class left
   // off would keep the previous one and old highlights would linger.
@@ -161,7 +164,7 @@ onBeforeUnmount(() => {
 onNodesInitialized(() => {
   if (!fitPending) return
   fitPending = false
-  void fitView({ padding: 0.12, duration: 300 })
+  void fitView({ padding: 0.12, duration: 300, maxZoom: 1 })
 })
 
 // ---------------------------------------------------------------------------
@@ -182,7 +185,8 @@ function flyTo(id: string, attempt = 0): void {
   }
   pendingFocus = null
   const { x, y } = node.computedPosition
-  const zoom = Math.max(getViewport().zoom, node.type === 'container' ? 0.6 : 0.9)
+  // Close enough to read, never so close that a small diagram fills the screen.
+  const zoom = Math.min(1.1, Math.max(getViewport().zoom, node.type === 'container' ? 0.6 : 0.9))
   void setCenter(x + width / 2, y + node.dimensions.height / 2, { zoom, duration: 500 })
 }
 
@@ -405,18 +409,29 @@ function toggle(id: string): void {
       <Panel position="bottom-left">
         <div class="flex overflow-hidden rounded-[8px] border border-border2 bg-panel">
           <button type="button" class="h-[30px] w-[30px] cursor-pointer border-r border-border text-muted hover:bg-raise hover:text-text" title="Zoom out" @click="zoomOut({ duration: 160 })">−</button>
-          <button type="button" class="h-[30px] cursor-pointer border-r border-border px-[10px] text-[11.5px] text-muted hover:bg-raise hover:text-text" @click="fitView({ padding: 0.12, duration: 300 })">Fit</button>
+          <button type="button" class="h-[30px] cursor-pointer border-r border-border px-[10px] text-[11.5px] text-muted hover:bg-raise hover:text-text" @click="fitView({ padding: 0.12, duration: 300, maxZoom: 1 })">Fit</button>
           <button type="button" class="h-[30px] w-[30px] cursor-pointer text-muted hover:bg-raise hover:text-text" title="Zoom in" @click="zoomIn({ duration: 160 })">+</button>
         </div>
       </Panel>
       <Panel position="top-left">
         <div class="flex gap-[10px] rounded-[8px] border border-border bg-panel px-[10px] py-[5px] text-[10.5px] text-muted">
-          <span><span class="font-bold text-ok">NEW</span> added</span>
-          <span><span class="font-bold text-warn">EDITED</span> changed</span>
+          <template v-if="!sim.isProject">
+            <span><span class="font-bold text-ok">NEW</span> added</span>
+            <span><span class="font-bold text-warn">EDITED</span> changed</span>
+          </template>
           <span>Drag from Add to place · drag a tile's edge dot to connect · ⌘Z undo · Del remove</span>
         </div>
       </Panel>
     </VueFlow>
+    <div
+      v-if="isEmpty && !sim.draggingType"
+      class="pointer-events-none absolute inset-x-0 bottom-[16%] flex flex-col items-center gap-[6px] text-center"
+    >
+      <div class="text-[14px] font-semibold text-text">Start sketching</div>
+      <div class="max-w-[360px] text-[12px] leading-[1.5] text-muted">
+        Drag a VPC onto the region to lay out a network, or drop services like S3, SQS and Lambda straight in.
+      </div>
+    </div>
     <Transition name="ca-fade">
       <div
         v-if="dropHint"
