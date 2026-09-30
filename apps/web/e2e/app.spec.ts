@@ -190,6 +190,23 @@ test.describe('resource detail page', () => {
     await expect(page.locator('.vue-flow__node').first()).toBeVisible()
   })
 
+  test('returns to a view other than the diagram, drill-down included', async ({ page }) => {
+    // The first test starts and ends on the diagram, which is also the
+    // default — so it passed while Back went one view too far. Starting from
+    // a cost drill-down is what caught it.
+    await scanned(page)
+    await page.locator('nav button[title="Cost"]').click()
+    await page.getByRole('tab', { name: 'Run-rate' }).click()
+    await page.locator('main button', { hasText: 'prod-vpc' }).first().click()
+    await expect(page.getByRole('button', { name: '‹ Cost' })).toBeVisible()
+
+    await page.locator('main button[title="Open the resource\'s full page"]', { hasText: 'batch-runner' }).first().click()
+    await expect(page.locator('.ca-detail-heading').filter({ hasText: 'Cost' })).toBeVisible()
+
+    await page.getByRole('button', { name: '← Back' }).click()
+    await expect(page.getByRole('button', { name: '‹ Cost' })).toBeVisible()
+  })
+
   test('shows the sections that apply to the resource, and no others', async ({ page }) => {
     await scanned(page)
     await selectViaPalette(page, 'cortex-waf')

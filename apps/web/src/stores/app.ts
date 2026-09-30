@@ -104,7 +104,10 @@ export const useAppStore = defineStore('app', () => {
   const previousView = ref<ViewId>('topology')
 
   function setView(next: ViewId): void {
-    if (next !== 'resource' && view.value !== 'resource') previousView.value = view.value
+    // Record the view being left when the resource page opens — that is the
+    // one Back returns to. (The condition was once inverted, which recorded
+    // the view before that and sent Back one step too far.)
+    if (next === 'resource' && view.value !== 'resource') previousView.value = view.value
     view.value = next
   }
 
