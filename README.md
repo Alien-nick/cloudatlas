@@ -7,6 +7,8 @@ Claude agent for troubleshooting.
 Everything runs on your machine. Credentials are never sent to the browser, and the code never calls
 a mutating AWS API.
 
+![The topology view: regions, VPCs, availability zones and subnets drawn as nested containers, with a database selected in the detail panel](docs/screenshots/topology.webp)
+
 ---
 
 ## What it does
@@ -34,6 +36,62 @@ Three guarantees hold throughout:
 - **Honest about gaps.** A denied permission or an uncollected fact is shown as missing or unknown,
   never as healthy or compliant.
 - **Local.** The server binds to `127.0.0.1` and rejects requests from any other origin.
+
+---
+
+## A tour
+
+Every screenshot is from demo mode (`npm run dev:demo`), a fictional three-region account, so what
+you see here is what you get before connecting AWS at all.
+
+### Health
+
+Live incidents and configuration findings, each with the evidence behind it. Here the demo's
+staged incidents: a failed status check, an RDS CPU and connection spike, and a WAF surge.
+
+![Health view listing critical findings with evidence and sparklines](docs/screenshots/health.webp)
+
+### Metrics
+
+CloudWatch metrics stream for the selected resource, with how far behind the newest datapoint is.
+
+![Metrics tab for an RDS instance showing CPU, connections and read latency spiking together](docs/screenshots/metrics.webp)
+
+### Security groups
+
+The Security Groups view draws security-group relationships and flags rules that expose a
+sensitive port to the internet.
+
+![Security Groups view with a risky SSH rule highlighted from the internet to an EC2 instance](docs/screenshots/security-groups.webp)
+
+### Compliance
+
+Each VPC measured against HIPAA, SOC 2, PCI DSS and AWS FSBP, gaps first, with the failing
+resources and their evidence.
+
+![Compliance view scoped to one VPC, showing HIPAA controls with gaps and failing resources](docs/screenshots/compliance.webp)
+
+Recommendations rank the fixes and give copy-paste AWS CLI commands with the resource's own
+identifiers filled in. CloudAtlas never runs them.
+
+![Recommendations with a caution, a ready-to-copy revoke command, and the controls it closes](docs/screenshots/recommendations.webp)
+
+Every resource gets a benchmark score and its own fixes in the detail panel.
+
+![Resources ranked by benchmark score, with an EC2 instance's compliance tab open](docs/screenshots/resource-compliance.webp)
+
+### Logs
+
+Search, live tail and Logs Insights across a resource's log groups. Here the API's database
+errors line up with the RDS incident above.
+
+![Logs search showing application errors about exhausted database connections](docs/screenshots/logs.webp)
+
+### Analytics
+
+Coverage stated honestly: what CloudAtlas can see, against every resource it found.
+
+![Analytics view with observability coverage, a health breakdown and resource counts](docs/screenshots/analytics.webp)
 
 ---
 
